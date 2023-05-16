@@ -1,1 +1,0 @@
-pyinstaller --name "DUGR_GUI" --noconsole --icon=light-bulb.ico dugr_main.py
