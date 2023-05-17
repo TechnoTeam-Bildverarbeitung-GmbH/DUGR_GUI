@@ -275,6 +275,11 @@ def execute_projective_dist_algorithm(src_image, viewing_distance, luminous_area
                         src_image[int(rois[i].top_left[1] - ceil(filter_width/2)):int(rois[i].bottom_left[1] + ceil(filter_width/2)),
                                   int(rois[i].bottom_left[0] - ceil(filter_width/2)):int(rois[i].bottom_right[0] + ceil(filter_width/2))],
                         filter_width, sigma)
+            elif type(rois[i]).__name__ == 'RectangularRoi' or type(rois[i]).__name__ == 'CircularRoi':
+                filtered_img = filter_image(
+                    src_image[int(rois[i].top_left[1] - ceil(filter_width / 2)):int(rois[i].bottom_left[1] + ceil(filter_width / 2)),
+                              int(rois[i].top_left[0] - ceil(filter_width / 2)):int(rois[i].top_right[0] + ceil(filter_width / 2))],
+                    filter_width, sigma)
 
     #  Define lists to store parameters corresponding to the pixel values of the threshold
     binarized_img = np.zeros(filtered_img.shape)

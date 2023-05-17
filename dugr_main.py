@@ -51,6 +51,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("DUGR GUI")
         self.setWindowIcon(QIcon(os.path.join(basedir, "light-bulb.ico")))
 
+        self.projective_dist_tab = None
+        self.projective_corr_tab = None
+
     def start_projective_distorted_ui(self):
         self.projective_dist_tab = ProjectiveDistUi(self)
         self.setCentralWidget(self.projective_dist_tab)
@@ -121,6 +124,19 @@ class ProjectiveDistUi(QWidget):
         self.filter_only_roi_flag = False
 
         self.src_plot = None
+        self._roi_axs = None
+        self._filtered_image_ax = None
+        self._binarized_image_ax = None
+        self._result_ax = None
+        self.result_table = None
+
+        self.binarized_image_plot = None
+        self.filtered_image = None
+        self.binarized_image = None
+
+        self.A_eff = None
+        self.A_p_new_I = None
+        self.A_p_new_L = None
 
         # Button to load an image file
         self.load_file_button = QPushButton("Open File", self)
@@ -148,11 +164,6 @@ class ProjectiveDistUi(QWidget):
         # Checkbox to switch between projective corrected or distorted algorithm
         self.check_box_proj_corr = QCheckBox("Projective correction", self)
         layout2.addWidget(self.check_box_proj_corr)
-
-        # Checkbox to enable the output of all images
-        # self.check_box_show_imgs = QCheckBox("Show all evaluation images")
-        # layout2.addWidget(self.check_box_show_imgs)
-        # self.check_box_show_imgs.stateChanged.connect(self.on_show_images_check_box_change)
 
         # Checkbox to filter only ROI around
         self.checkbox_filter_only_roi = QCheckBox("Filter only ROI")
@@ -457,93 +468,100 @@ class ProjectiveDistUi(QWidget):
                                                   props=dict(color='white', linestyle='-', linewidth=2, alpha=0.5))
 
     def on_safe_roi_click(self):
-        if self.source_image is not None:
+        if not hasattr(self, 'source_image'):
+            self.status_bar.showMessage('In order to safe ROIs you need to open a source image first!')
+            return
+        if isinstance(self.shape_selector, PolygonSelector) and not np.any(self.vertices):
+            self.status_bar.showMessage('In order to safe ROIs you need to draw them on the source image first!')
+            return
+        if (isinstance(self.shape_selector, EllipseSelector) or isinstance(self.shape_selector, RectangleSelector))\
+                and self.click == [None, None]:
+            self.status_bar.showMessage('In order to safe ROIs you need to draw them on the source image first!')
+            return
 
-            if self.roi_shape_flag == "Rectangular":
-                ROI = RectangularRoi(self.source_image[self.click[1]:self.release[1], self.click[0]:self.release[0]],
-                                     np.array([self.click, self.release]))
-            elif self.roi_shape_flag == "Circular":
-                ROI = CircularRoi(self.source_image[self.click[1]:self.release[1], self.click[0]:self.release[0]],
-                                  np.array([self.click, self.release]))
-            elif self.roi_shape_flag == "Trapezoid":
-                ROI = TrapezoidRoi(src_image=self.source_image, vertices=self.vertices)
+        if self.roi_shape_flag == "Rectangular":
+            ROI = RectangularRoi(self.source_image[self.click[1]:self.release[1], self.click[0]:self.release[0]],
+                                 np.array([self.click, self.release]))
+        elif self.roi_shape_flag == "Circular":
+            ROI = CircularRoi(self.source_image[self.click[1]:self.release[1], self.click[0]:self.release[0]],
+                              np.array([self.click, self.release]))
+        elif self.roi_shape_flag == "Trapezoid":
+            ROI = TrapezoidRoi(src_image=self.source_image, vertices=self.vertices)
 
-            self.rois.append(ROI)
+        self.rois.append(ROI)
 
-            if len(self.rois) == 1:
-                if isinstance(self.rois[0], RectangularRoi):
-                    self._roi_axs = self.roi_figure.figure.subplots()
-                    roi_plot = self._roi_axs.imshow(self.rois[0].roi_array,
-                                                    norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                    cmap=ls_cmap)
-                    self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs, fraction=0.04, pad=0.035,
+        if len(self.rois) == 1:
+            if isinstance(self.rois[0], RectangularRoi):
+                self._roi_axs = self.roi_figure.figure.subplots()
+                roi_plot = self._roi_axs.imshow(self.rois[0].roi_array,
+                                                norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                cmap=ls_cmap)
+                self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs, fraction=0.04, pad=0.035,
+                                                label="cd/m^2")
+
+            elif isinstance(self.rois[0], CircularRoi):
+                self._roi_axs = self.roi_figure.figure.subplots()
+                roi_plot = self._roi_axs.imshow(self.rois[0].bounding_box,
+                                                norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                cmap=ls_cmap)
+                self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs, fraction=0.04, pad=0.035,
+                                                label="cd/m^2")
+
+                t = np.linspace(0, 2 * math.pi, 100)
+                self._roi_axs.plot(self.rois[0].width / 2 + (self.rois[0].width - 1) / 2 * np.cos(t),
+                                   self.rois[0].height / 2 + (self.rois[0].height - 1) / 2 * np.sin(t),
+                                   color='red')
+
+            elif isinstance(self.rois[0], TrapezoidRoi):
+                self._roi_axs = self.roi_figure.figure.subplots()
+                self._roi_axs.plot(self.rois[0].d1_x, self.rois[0].d1_y, color='red', linewidth=3)
+                self._roi_axs.plot(self.rois[0].d2_x, self.rois[0].d2_y, color='red', linewidth=3)
+                self._roi_axs.plot(self.rois[0].d3_x, self.rois[0].d3_y, color='red', linewidth=3)
+                self._roi_axs.plot(self.rois[0].d4_x, self.rois[0].d4_y, color='red', linewidth=3)
+                roi_plot = self._roi_axs.imshow(self.rois[0].bounding_box,
+                                                norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                cmap=ls_cmap)
+                self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs, fraction=0.04, pad=0.035,
+                                                label="cd/m^2")
+
+            self.status_bar.showMessage("Successfully saved: 1 ROI")
+
+        elif len(self.rois) > 1:
+
+            self.roi_figure.figure.clf()
+
+            self._roi_axs = self.roi_figure.figure.subplots(len(self.rois))
+            for i in range(len(self.rois)):
+                if isinstance(self.rois[i], RectangularRoi):
+                    roi_plot = self._roi_axs[i].imshow(self.rois[i].roi_array,
+                                                       norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                       cmap=ls_cmap)
+                    self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs[i], fraction=0.04, pad=0.035,
                                                     label="cd/m^2")
 
-                elif isinstance(self.rois[0], CircularRoi):
-                    self._roi_axs = self.roi_figure.figure.subplots()
-                    roi_plot = self._roi_axs.imshow(self.rois[0].bounding_box,
-                                                    norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                    cmap=ls_cmap)
-                    self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs, fraction=0.04, pad=0.035,
+                elif isinstance(self.rois[i], CircularRoi):
+                    roi_plot = self._roi_axs[i].imshow(self.rois[i].bounding_box,
+                                                       norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                       cmap=ls_cmap)
+                    self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs[i], fraction=0.04, pad=0.035,
                                                     label="cd/m^2")
 
                     t = np.linspace(0, 2 * math.pi, 100)
-                    self._roi_axs.plot(self.rois[0].width / 2 + (self.rois[0].width - 1) / 2 * np.cos(t),
-                                       self.rois[0].height / 2 + (self.rois[0].height - 1) / 2 * np.sin(t),
-                                       color='red')
+                    self._roi_axs[i].plot(self.rois[i].width / 2 + (self.rois[i].width - 1) / 2 * np.cos(t),
+                                          self.rois[i].height / 2 + (self.rois[i].height - 1) / 2 * np.sin(t),
+                                          color='red')
 
-                elif isinstance(self.rois[0], TrapezoidRoi):
-                    self._roi_axs = self.roi_figure.figure.subplots()
-                    self._roi_axs.plot(self.rois[0].d1_x, self.rois[0].d1_y, color='red', linewidth=3)
-                    self._roi_axs.plot(self.rois[0].d2_x, self.rois[0].d2_y, color='red', linewidth=3)
-                    self._roi_axs.plot(self.rois[0].d3_x, self.rois[0].d3_y, color='red', linewidth=3)
-                    self._roi_axs.plot(self.rois[0].d4_x, self.rois[0].d4_y, color='red', linewidth=3)
-                    roi_plot = self._roi_axs.imshow(self.rois[0].bounding_box,
-                                                    norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                    cmap=ls_cmap)
-                    self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs, fraction=0.04, pad=0.035,
+                elif isinstance(self.rois[i], TrapezoidRoi):
+                    roi_plot = self._roi_axs[i].imshow(self.rois[i].bounding_box,
+                                                       norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                       cmap=ls_cmap)
+                    self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs[i], fraction=0.04, pad=0.035,
                                                     label="cd/m^2")
 
-                self.status_bar.showMessage("Successfully saved: 1 ROI")
-
-            elif len(self.rois) > 1:
-
-                self.roi_figure.figure.clf()
-
-                self._roi_axs = self.roi_figure.figure.subplots(len(self.rois))
-                for i in range(len(self.rois)):
-                    if isinstance(self.rois[i], RectangularRoi):
-                        roi_plot = self._roi_axs[i].imshow(self.rois[i].roi_array,
-                                                           norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                           cmap=ls_cmap)
-                        self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs[i], fraction=0.04, pad=0.035,
-                                                        label="cd/m^2")
-
-                    elif isinstance(self.rois[i], CircularRoi):
-                        roi_plot = self._roi_axs[i].imshow(self.rois[i].bounding_box,
-                                                           norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                           cmap=ls_cmap)
-                        self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs[i], fraction=0.04, pad=0.035,
-                                                        label="cd/m^2")
-
-                        t = np.linspace(0, 2 * math.pi, 100)
-                        self._roi_axs[i].plot(self.rois[i].width / 2 + (self.rois[i].width - 1) / 2 * np.cos(t),
-                                              self.rois[i].height / 2 + (self.rois[i].height - 1) / 2 * np.sin(t),
-                                              color='red')
-
-                    elif isinstance(self.rois[i], TrapezoidRoi):
-                        roi_plot = self._roi_axs[i].imshow(self.rois[i].bounding_box,
-                                                           norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                           cmap=ls_cmap)
-                        self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs[i], fraction=0.04, pad=0.035,
-                                                        label="cd/m^2")
-
-                self.status_bar.showMessage("Successfully saved: " + str(len(self.rois)) + " ROIs")
-            else:
-                self.status_bar.showMessage("No ROI to safe selected")
-            self.roi_figure.draw()
+            self.status_bar.showMessage("Successfully saved: " + str(len(self.rois)) + " ROIs")
         else:
-            self.status_bar.showMessage("Please load an image into the software before saving a ROI")
+            self.status_bar.showMessage("No ROI to safe selected")
+        self.roi_figure.draw()
 
     def on_delete_last_roi(self):
         if len(self.rois) > 0:
@@ -572,6 +590,14 @@ class ProjectiveDistUi(QWidget):
                                        self.rois[0].height / 2 + (self.rois[0].height - 1) / 2 * np.sin(t),
                                        color='red')
 
+                elif isinstance(self.rois[0], TrapezoidRoi):
+                    self._roi_axs = self.roi_figure.figure.subplots()
+                    roi_plot = self._roi_axs.imshow(self.rois[0].bounding_box,
+                                                       norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                       cmap=ls_cmap)
+                    self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs, fraction=0.04, pad=0.035,
+                                                    label="cd/m^2")
+
             if len(self.rois) > 1:
                 self._roi_axs = self.roi_figure.figure.subplots(len(self.rois))
                 for i in range(len(self.rois)):
@@ -592,9 +618,16 @@ class ProjectiveDistUi(QWidget):
                         self._roi_axs[i].plot(self.rois[i].width / 2 + (self.rois[i].width - 1) / 2 * np.cos(t),
                                               self.rois[i].height / 2 + (self.rois[i].height - 1) / 2 * np.sin(t),
                                               color='red')
-
+                    elif isinstance(self.rois[i], TrapezoidRoi):
+                        roi_plot = self._roi_axs[i].imshow(self.rois[i].bounding_box,
+                                                           norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                           cmap=ls_cmap)
+                        self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs[i], fraction=0.04, pad=0.035,
+                                                        label="cd/m^2")
             self.roi_figure.draw()
             self.status_bar.showMessage("Successfully deleted the last ROI.     " + str(len(self.rois)) + " remaining")
+        else:
+            self.status_bar.showMessage("All of the ROIs have already been removed, none left.")
 
     def on_luminance_threshold_change(self):
         userinput = self.luminance_threshold_line_box.text()
@@ -692,20 +725,20 @@ class ProjectiveDistUi(QWidget):
             self.A_p = (np.pi * (self.luminaire_height/2) * (self.luminaire_width/2))\
                        * np.cos(np.radians(90 - self.viewing_angle))
 
-        self.A_p_new = (self.luminous_intensity**2)/((self.l_eff*10**-6)**2 * self.A_eff)
-        self.A_p_new_approx = self.A_p / self.k_square_approx
+        self.A_p_new_I = (self.luminous_intensity ** 2) / ((self.l_eff * 10 ** -6) ** 2 * self.A_eff)
+        self.A_p_new_L = self.A_p / self.k_square_approx
 
-        if self.A_p_new != 0:
-            self.k_square = self.A_p/self.A_p_new
+        if self.A_p_new_I != 0:
+            self.k_square = self.A_p/self.A_p_new_I
             self.dugr = 8 * math.log(self.k_square, 10)
 
         table_data = [
             ["DUGR_I", f"{self.dugr:.1f}"],
             ["k^2_I", f"{self.k_square:.1f}"],
-            ["A_p_new_I", f"{self.A_p_new:.0f} [mm^2]"],
+            ["A_p_new_I", f"{self.A_p_new_I:.0f} [mm^2]"],
             ["DUGR_L", f"{self.dugr_approx:.1f}"],
             ["k^2_L", f"{self.k_square_approx:.1f}"],
-            ["A_p_new_L", f"{self.A_p_new_approx:.0f} [mm^2]"],
+            ["A_p_new_L", f"{self.A_p_new_L:.0f} [mm^2]"],
             ["A_p", f"{self.A_p:.0f} [mm^2]"],
             ["A_eff", f"{self.A_eff:.0f} [mm^2]"],
             ["Effective luminance", f"{self.l_eff:.2f} [cd/m^2]"],
@@ -1159,6 +1192,22 @@ class ProjectiveCorrUi(QWidget):
         self.status_bar.showMessage("ROI selection deleted")
 
     def on_projective_transformation_click(self):
+        if self.source_image is None:
+            self.status_bar.showMessage('In order to execute the projective correction a source image has to be opened'
+                                        ' first')
+            return
+        if not np.any(self.projective_rect):
+            self.status_bar.showMessage('In order to execute the projective correction the edge points have to be drawn'
+                                        ' onto the source image first')
+            return
+        if self.luminaire_width == 0:
+            self.status_bar.showMessage('In order to execute the projective correction the luminaire width has to be'
+                                        ' defined')
+            return
+        if self.luminaire_height == 0:
+            self.status_bar.showMessage('In order to execute the projective correction the luminaire height has to be'
+                                        ' defined')
+            return
         self.rectified_image = dugr_image_processing.projective_rectification(self.source_image,
                                                                               self.projective_rect,
                                                                               self.luminaire_width,
@@ -1170,8 +1219,12 @@ class ProjectiveCorrUi(QWidget):
             self.rectified_figure.figure.colorbar(self.rect_plot, ax=self._rectified_ax, fraction=0.04, pad=0.035,
                                                   label="cd/m^2")
         else:
-            self.rect_plot.set_data(self.rectified_image)
-            self.rect_plot.autoscale()
+            self.rectified_figure.figure.clf()
+            self.rect_plot = self._rectified_ax.imshow(self.rectified_image,
+                                                       norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                       cmap=ls_cmap)
+            self.rectified_figure.figure.colorbar(self.rect_plot, ax=self._rectified_ax, fraction=0.04, pad=0.035,
+                                                  label="cd/m^2")
         self.rectified_figure.draw()
         self.status_bar.showMessage("Projective Transformation successful")
 
@@ -1225,77 +1278,80 @@ class ProjectiveCorrUi(QWidget):
             self.source_figure.figure.colorbar(self.src_plot, ax=self._source_ax, fraction=0.04, pad=0.035,
                                                label="cd/m^2")
             self.source_figure.draw()
-            self.shape_selector = PolygonSelector(ax=self._source_ax, onselect=self.on_poly_select, useblit=True,
+            self.poly = PolygonSelector(ax=self._source_ax, onselect=self.on_poly_select, useblit=True,
                                                   props=dict(color='white', linestyle='-', linewidth=2, alpha=0.5))
 
     def on_safe_roi_click(self):
-        if self.rectified_image is not None:
+        if self.rectified_image is None:
+            self.status_bar.showMessage("In order to safe ROIs you have to execute the projective correction first")
+            return
+        if not np.any(self.click):
+            self.status_bar.showMessage("In order to safe ROIs you have to draw them onto the projective corrected "
+                                        "image first")
+            return
 
-            if self.roi_shape_flag == "Rectangular":
-                ROI = RectangularRoi(self.rectified_image[self.click[1]:self.release[1], self.click[0]:self.release[0]],
-                                     np.array([self.click, self.release]))
-            elif self.roi_shape_flag == "Circular":
-                ROI = CircularRoi(self.rectified_image[self.click[1]:self.release[1], self.click[0]:self.release[0]],
-                                  np.array([self.click, self.release]))
+        if self.roi_shape_flag == "Rectangular":
+            ROI = RectangularRoi(self.rectified_image[self.click[1]:self.release[1], self.click[0]:self.release[0]],
+                                 np.array([self.click, self.release]))
+        elif self.roi_shape_flag == "Circular":
+            ROI = CircularRoi(self.rectified_image[self.click[1]:self.release[1], self.click[0]:self.release[0]],
+                              np.array([self.click, self.release]))
 
-            self.rois.append(ROI)
+        self.rois.append(ROI)
 
-            if len(self.rois) == 1:
-                if isinstance(self.rois[0], RectangularRoi):
-                    self._roi_axs = self.roi_figure.figure.subplots()
-                    roi_plot = self._roi_axs.imshow(self.rois[0].roi_array,
-                                                    norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                    cmap=ls_cmap)
-                    self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs, fraction=0.04, pad=0.035,
+        if len(self.rois) == 1:
+            if isinstance(self.rois[0], RectangularRoi):
+                self._roi_axs = self.roi_figure.figure.subplots()
+                roi_plot = self._roi_axs.imshow(self.rois[0].roi_array,
+                                                norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                cmap=ls_cmap)
+                self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs, fraction=0.04, pad=0.035,
+                                                label="cd/m^2")
+
+            elif isinstance(self.rois[0], CircularRoi):
+                self._roi_axs = self.roi_figure.figure.subplots()
+                roi_plot = self._roi_axs.imshow(self.rois[0].bounding_box,
+                                                norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                cmap=ls_cmap)
+                self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs, fraction=0.04, pad=0.035,
+                                                label="cd/m^2")
+
+                t = np.linspace(0, 2 * math.pi, 100)
+                self._roi_axs.plot(self.rois[0].width / 2 + (self.rois[0].width - 1) / 2 * np.cos(t),
+                                   self.rois[0].height / 2 + (self.rois[0].height - 1) / 2 * np.sin(t),
+                                   color='red')
+
+            self.status_bar.showMessage("Successfully saved: 1 ROI")
+
+        elif len(self.rois) > 1:
+
+            self.roi_figure.figure.clf()
+
+            self._roi_axs = self.roi_figure.figure.subplots(len(self.rois))
+            for i in range(len(self.rois)):
+                if isinstance(self.rois[i], RectangularRoi):
+                    roi_plot = self._roi_axs[i].imshow(self.rois[i].roi_array,
+                                                       norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                       cmap=ls_cmap)
+                    self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs[i], fraction=0.04, pad=0.035,
                                                     label="cd/m^2")
-
-                elif isinstance(self.rois[0], CircularRoi):
-                    self._roi_axs = self.roi_figure.figure.subplots()
-                    roi_plot = self._roi_axs.imshow(self.rois[0].bounding_box,
-                                                    norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                    cmap=ls_cmap)
-                    self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs, fraction=0.04, pad=0.035,
+                elif isinstance(self.rois[i], CircularRoi):
+                    roi_plot = self._roi_axs[i].imshow(self.rois[i].bounding_box,
+                                                       norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                       cmap=ls_cmap)
+                    self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs[i], fraction=0.04, pad=0.035,
                                                     label="cd/m^2")
 
                     t = np.linspace(0, 2 * math.pi, 100)
-                    self._roi_axs.plot(self.rois[0].width / 2 + (self.rois[0].width - 1) / 2 * np.cos(t),
-                                       self.rois[0].height / 2 + (self.rois[0].height - 1) / 2 * np.sin(t),
-                                       color='red')
+                    self._roi_axs[i].plot(self.rois[i].width / 2 + (self.rois[i].width - 1) / 2 * np.cos(t),
+                                          self.rois[i].height / 2 + (self.rois[i].height - 1) / 2 * np.sin(t),
+                                          color='red')
 
-                self.status_bar.showMessage("Successfully saved: 1 ROI")
-
-            elif len(self.rois) > 1:
-
-                self.roi_figure.figure.clf()
-
-                self._roi_axs = self.roi_figure.figure.subplots(len(self.rois))
-                for i in range(len(self.rois)):
-                    if isinstance(self.rois[i], RectangularRoi):
-                        roi_plot = self._roi_axs[i].imshow(self.rois[i].roi_array,
-                                                           norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                           cmap=ls_cmap)
-                        self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs[i], fraction=0.04, pad=0.035,
-                                                        label="cd/m^2")
-                    elif isinstance(self.rois[i], CircularRoi):
-                        roi_plot = self._roi_axs[i].imshow(self.rois[i].bounding_box,
-                                                           norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                           cmap=ls_cmap)
-                        self.roi_figure.figure.colorbar(roi_plot, ax=self._roi_axs[i], fraction=0.04, pad=0.035,
-                                                        label="cd/m^2")
-
-                        t = np.linspace(0, 2 * math.pi, 100)
-                        self._roi_axs[i].plot(self.rois[i].width / 2 + (self.rois[i].width - 1) / 2 * np.cos(t),
-                                              self.rois[i].height / 2 + (self.rois[i].height - 1) / 2 * np.sin(t),
-                                              color='red')
-
-                self.status_bar.showMessage("Successfully saved: " + str(len(self.rois)) + " ROIs")
-            else:
-                self.status_bar.showMessage("No ROI to safe selected")
-            self.roi_figure.draw()
-            self.callback_clear_roi_selection()
-
+            self.status_bar.showMessage("Successfully saved: " + str(len(self.rois)) + " ROIs")
         else:
-            self.status_bar.showMessage("Please execute projective transformation before saving ROIs")
+            self.status_bar.showMessage("No ROI to safe selected")
+        self.roi_figure.draw()
+        self.callback_clear_roi_selection()
 
     def on_delete_last_roi(self):
         if len(self.rois) > 0:
@@ -1347,6 +1403,8 @@ class ProjectiveCorrUi(QWidget):
 
             self.roi_figure.draw()
             self.status_bar.showMessage("Successfully deleted the last ROI.     " + str(len(self.rois)) + " remaining")
+        else:
+            self.status_bar.showMessage("All of the ROIs have been removed successfully, none left.")
 
     def on_delete_all_rois(self):
         self.rois = []
@@ -1356,6 +1414,9 @@ class ProjectiveCorrUi(QWidget):
         self.status_bar.showMessage("Successfully deleted all of the ROIs.")
 
     def on_filter_image_click(self):
+        if len(self.rois) == 0:
+            self.status_bar.showMessage("In order to filter the image you need to select ROIs first!")
+            return
         self.on_poly_select(self.vertices)
         warped_border_image = dugr_image_processing.projective_rectification_with_borders(self.source_image,
                                                                                           self.projective_rect,
@@ -1415,6 +1476,9 @@ class ProjectiveCorrUi(QWidget):
                                         "     Border size: " + str(self.border_size))
 
     def on_binarize_click(self):
+        if not hasattr(self, 'roi_coords_with_border'):
+            self.status_bar.showMessage('In order to do binarization you need to filter the image first.')
+            return
         self.binarized_rois = []
         for i in range(len(self.roi_coords_with_border)):
             if isinstance(self.roi_coords_with_border[i], RectangularRoi):
