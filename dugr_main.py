@@ -6,6 +6,7 @@ from matplotlib.colors import LinearSegmentedColormap, LogNorm
 import dugr_image_io
 import dugr_image_processing
 import json
+import pandas as pd
 
 from matplotlib.pyplot import register_cmap
 from matplotlib.backends.backend_qtagg import FigureCanvas, NavigationToolbar2QT
@@ -93,10 +94,10 @@ class ProjectiveDistUi(QWidget):
         self.fwhm = 0.0
         self.sigma = 0.0
         self.filter_width = 0.0
-        self.dugr = 0.0
-        self.dugr_approx = 0.0
-        self.k_square = 0.0
-        self.k_square_approx = 0.0
+        self.DUGR_I = 0.0
+        self.DUGR_L = 0.0
+        self.k_square_I = 0.0
+        self.k_square_L = 0.0
         self.l_b = 0.0
         self.l_eff = 0.0
         self.l_s = 0.0
@@ -118,6 +119,7 @@ class ProjectiveDistUi(QWidget):
 
         self.logarithmic_scaling_flag = 'x4'
         self.vmin = 0
+        self.df = None
 
         self.rois = []
         self.roi_shape_flag = "Trapezoid"
@@ -137,6 +139,8 @@ class ProjectiveDistUi(QWidget):
         self.A_eff = None
         self.A_p_new_I = None
         self.A_p_new_L = None
+        self.A = None
+        self.A_new_L = None
 
         # Button to load an image file
         self.load_file_button = QPushButton("Open File", self)
@@ -312,10 +316,13 @@ class ProjectiveDistUi(QWidget):
         self.result_figure_tab.setLayout(self.result_tab_layout)
         self.result_figure = FigureCanvas(Figure(figsize=(12, 8), layout='tight'))
         self.export_protocol_button = QPushButton("Export protocol", self)
+        self.export_to_json_button = QPushButton("Export to *.json", self)
         self.result_tab_layout.addWidget(self.result_figure)
         self.result_tab_layout.addLayout(self.result_tab_layout_h)
         self.result_tab_layout_h.addWidget(self.export_protocol_button)
+        self.result_tab_layout_h.addWidget(self.export_to_json_button)
         self.export_protocol_button.clicked.connect(self.on_export_protocol_click)
+        self.export_to_json_button.clicked.connect(self.on_export_to_json_click)
         self.result_tab_layout_h.addStretch()
         self.export_protocol_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
         self.export_protocol_shortcut.activated.connect(self.on_export_protocol_click)
@@ -706,7 +713,7 @@ class ProjectiveDistUi(QWidget):
             self.status_bar.showMessage("No ROI found! Make sure to safe a ROI before executing the calculation")
             return
 
-        self.dugr_approx, self.k_square_approx, self.l_eff, self.l_s, self.solid_angle_eff, self.omega_l, \
+        self.DUGR_L, self.k_square_L, self.l_eff, self.l_s, self.solid_angle_eff, self.omega_l, \
             self.optical_resolution, self.rb_min, self.ro_min, self.fwhm, self.sigma, self.filter_width, \
             self.filtered_image, self.binarized_image = \
             dugr_image_processing.execute_projective_dist_algorithm(src_image=self.source_image,
@@ -726,39 +733,102 @@ class ProjectiveDistUi(QWidget):
                        * np.cos(np.radians(90 - self.viewing_angle))
 
         self.A_p_new_I = (self.luminous_intensity ** 2) / ((self.l_eff * 10 ** -6) ** 2 * self.A_eff)
-        self.A_p_new_L = self.A_p / self.k_square_approx
+        self.A_p_new_L = self.A_p / self.k_square_L
+
+        self.A_new_L = self.A_p_new_L / np.cos(np.radians(90 - self.viewing_angle))
+        self.A = self.luminaire_width * self.luminaire_height
 
         if self.A_p_new_I != 0:
-            self.k_square = self.A_p/self.A_p_new_I
-            self.dugr = 8 * math.log(self.k_square, 10)
+            self.k_square_I = self.A_p / self.A_p_new_I
+            self.DUGR_I = 8 * math.log(self.k_square_I, 10)
 
-        table_data = [
-            ["DUGR_I", f"{self.dugr:.1f}"],
-            ["k^2_I", f"{self.k_square:.1f}"],
-            ["A_p_new_I", f"{self.A_p_new_I:.0f} [mm^2]"],
-            ["DUGR_L", f"{self.dugr_approx:.1f}"],
-            ["k^2_L", f"{self.k_square_approx:.1f}"],
-            ["A_p_new_L", f"{self.A_p_new_L:.0f} [mm^2]"],
-            ["A_p", f"{self.A_p:.0f} [mm^2]"],
-            ["A_eff", f"{self.A_eff:.0f} [mm^2]"],
-            ["Effective luminance", f"{self.l_eff:.2f} [cd/m^2]"],
-            ["Mean Luminaire luminance", f"{self.l_s:.2f} [cd/m^2]"],
-            ["Effective solid angle", f"{self.solid_angle_eff:.6f} [sr]"],
-            ["Luminaire solid angle", f"{self.omega_l:.6f} [sr]"],
-            ["Measurement angle \u03B1E", f"{self.viewing_angle} [°]"],
-            ["Viewing distance", f"{self.viewing_distance} [mm]"],
-            ["Luminous area width", f"{self.luminaire_width} [mm]"],
-            ["Luminous area height", f"{self.luminaire_height} [mm]"],
-            ["Luminous intensity", f"{self.luminous_intensity:.1f} [cd]"],
-            ["lum_th", f"{self.lum_th} [cd/m^2]"],
-            ["d", f"{self.d} [mm]"],
-            ["Calculated optical resolution", f"{self.optical_resolution:.5f} [°/px]"],
-            ["FWHM", f"{self.fwhm:.2f} [px]"],
-            ["Filter width", f"{self.filter_width} [px]"],
-            ["Filter sigma", f"{self.sigma:.3f} [px]"],
-            ["rb min", f"{self.rb_min:.2f} [mm]"],
-            ["ro min", f"{self.ro_min:.5f} [°/px]"]
-        ]
+            table_data = [
+                ["DUGR_I", f"{self.DUGR_I:.1f}"],
+                ["k^2_I", f"{self.k_square_I:.1f}"],
+                ["A_p_new_I", f"{self.A_p_new_I:.0f} [mm^2]"],
+                ["DUGR_L", f"{self.DUGR_L:.1f}"],
+                ["k^2_L", f"{self.k_square_L:.1f}"],
+                ["A_p_new_L", f"{self.A_p_new_L:.0f} [mm^2]"],
+                ["A_p", f"{self.A_p:.0f} [mm^2]"],
+                ["A_new_L", f"{self.A_new_L:.0f} [mm^2]"],
+                ["A", f"{self.A:.0f} [mm^2]"],
+                ["A_eff", f"{self.A_eff:.0f} [mm^2]"],
+                ["L_eff", f"{self.l_eff:.2f} [cd/m^2]"],
+                ["L_mean", f"{self.l_s:.2f} [cd/m^2]"],
+                ["\u03C9_eff", f"{self.solid_angle_eff:.6f} [sr]"],
+                ["\u03C9_luminaire", f"{self.omega_l:.6f} [sr]"],
+                ["Measurement angle \u03B1E", f"{self.viewing_angle} [°]"],
+                ["Measurement distance", f"{self.viewing_distance} [mm]"],
+                ["Luminous area width", f"{self.luminaire_width} [mm]"],
+                ["Luminous area height", f"{self.luminaire_height} [mm]"],
+                ["I", f"{self.luminous_intensity:.1f} [cd]"],
+                ["lum_th", f"{self.lum_th} [cd/m^2]"],
+                ["d", f"{self.d} [mm]"],
+                ["Calculated optical resolution", f"{self.optical_resolution:.5f} [°/px]"],
+                ["FWHM", f"{self.fwhm:.2f} [px]"],
+                ["Filter width", f"{self.filter_width} [px]"],
+                ["Filter sigma", f"{self.sigma:.3f} [px]"],
+                ["rb min", f"{self.rb_min:.2f} [mm]"],
+                ["ro min", f"{self.ro_min:.5f} [°/px]"]
+            ]
+
+            data = {'Parameter': ['DUGR_I', 'k^2_I', 'A_p_new_I', 'DUGR_L', 'k^2_L', 'A_p_new_L', 'A_p', 'A_new_L', 'A',
+                                  'A_eff', 'L_eff', 'L_mean', '\u03C9_eff', '\u03C9_luminaire',
+                                  'Measurement angle \u03B1E', 'Measurement distance', 'Luminous area width',
+                                  'Luminous area height', 'I', 'lum_th', 'd', 'Calculated optical resolution', 'FWHM',
+                                  'Filter_width', 'Filter \u03C3', 'rb_min', 'ro_min'],
+                    'Value': [self.DUGR_I, self.k_square_I, self.A_p_new_I, self.DUGR_L, self.k_square_L,
+                              self.A_p_new_L, self.A_p, self.A_new_L, self.A, self.A_eff, self.l_eff, self.l_s,
+                              self.solid_angle_eff, self.omega_l, self.viewing_angle, self.viewing_distance,
+                              self.luminaire_width, self.luminaire_height, self.luminous_intensity, self.lum_th, self.d,
+                              self.optical_resolution, self.fwhm, self.filter_width, self.sigma, self.rb_min,
+                              self.ro_min],
+                    'Unit': ['None', 'None', 'mm^2', 'None', 'None', 'mm^2', 'mm^2', 'mm^2', 'mm^2', 'mm^2', 'cd/m^2',
+                             'cd/m^2', 'sr', 'sr', '°', 'mm', 'mm', 'mm', 'cd', 'cd/m^2', 'mm', '°/px', 'px', 'px',
+                             'px', 'mm', '°/px']}
+
+            self.df = pd.DataFrame(data)
+        else:
+            table_data = [
+                ["DUGR_L", f"{self.DUGR_L:.1f}"],
+                ["k^2_L", f"{self.k_square_L:.1f}"],
+                ["A_p_new_L", f"{self.A_p_new_L:.0f} [mm^2]"],
+                ["A_p", f"{self.A_p:.0f} [mm^2]"],
+                ["A_new_L", f"{self.A_new_L:.0f} [mm^2]"],
+                ["A", f"{self.A:.0f} [mm^2]"],
+                ["A_eff", f"{self.A_eff:.0f} [mm^2]"],
+                ["Effective luminance", f"{self.l_eff:.2f} [cd/m^2]"],
+                ["Mean Luminaire luminance", f"{self.l_s:.2f} [cd/m^2]"],
+                ["Effective solid angle", f"{self.solid_angle_eff:.6f} [sr]"],
+                ["Luminaire solid angle", f"{self.omega_l:.6f} [sr]"],
+                ["Measurement angle \u03B1E", f"{self.viewing_angle} [°]"],
+                ["Viewing distance", f"{self.viewing_distance} [mm]"],
+                ["Luminous area width", f"{self.luminaire_width} [mm]"],
+                ["Luminous area height", f"{self.luminaire_height} [mm]"],
+                ["lum_th", f"{self.lum_th} [cd/m^2]"],
+                ["d", f"{self.d} [mm]"],
+                ["Calculated optical resolution", f"{self.optical_resolution:.5f} [°/px]"],
+                ["FWHM", f"{self.fwhm:.2f} [px]"],
+                ["Filter width", f"{self.filter_width} [px]"],
+                ["Filter sigma", f"{self.sigma:.3f} [px]"],
+                ["rb min", f"{self.rb_min:.2f} [mm]"],
+                ["ro min", f"{self.ro_min:.5f} [°/px]"]
+            ]
+
+            data = {'Parameter': ['DUGR_L', 'k^2_L', 'A_p_new_L', 'A_p', 'A_new_L', 'A', 'A_eff', 'L_eff', 'L_mean',
+                                  '\u03C9_eff', '\u03C9_luminaire', 'Measurement angle \u03B1E', 'Measurement distance',
+                                  'Luminous area width', 'Luminous area height', 'lum_th', 'd',
+                                  'Calculated optical resolution', 'FWHM', 'Filter_width', 'Filter \u03C3', 'rb_min',
+                                  'ro_min'],
+                    'Value': [self.DUGR_L, self.k_square_L, self.A_p_new_L, self.A_p, self.A_new_L, self.A, self.A_eff,
+                              self.l_eff, self.l_s, self.solid_angle_eff, self.omega_l, self.viewing_angle,
+                              self.viewing_distance, self.luminaire_width, self.luminaire_height, self.lum_th, self.d,
+                              self.optical_resolution, self.fwhm, self.filter_width, self.sigma, self.rb_min,
+                              self.ro_min],
+                    'Unit': ['None', 'None', 'mm^2', 'mm^2', 'mm^2', 'mm^2', 'mm^2', 'cd/m^2', 'cd/m^2', 'sr', 'sr',
+                             '°', 'mm', 'mm', 'mm', 'cd/m^2', 'mm', '°/px', 'px', 'px', 'px', 'mm', '°/px']}
+
+            self.df = pd.DataFrame(data)
 
         self.filtered_image_figure.figure.clf()
         self._filtered_image_ax = self.filtered_image_figure.figure.subplots()
@@ -824,6 +894,12 @@ class ProjectiveDistUi(QWidget):
 
             pdf.close()
 
+    def on_export_to_json_click(self):
+        json_file = QFileDialog.getSaveFileName(self, "Export File", "", "*.json")[0]
+        if json_file:
+            self.df.to_json(json_file)
+            self.status_bar.showMessage('Export to *.json File successful')
+
 
 class ProjectiveCorrUi(QWidget):
     def __init__(self, parent=None):
@@ -864,6 +940,8 @@ class ProjectiveCorrUi(QWidget):
 
         self.logarithmic_scaling_flag = 'x4'
         self.vmin = 0
+
+        self.df = None
 
         self.ellipse_roi_data = []
         self.roi_shape_flag = "Rectangular"
@@ -1041,10 +1119,13 @@ class ProjectiveCorrUi(QWidget):
         self.result_tab.setLayout(self.result_tab_layout)
         self.result_figure = FigureCanvas(Figure(figsize=(12, 8), layout='tight'))
         self.export_protocol_button = QPushButton("Export protocol", self)
+        self.export_to_json_button = QPushButton("Export to *.json", self)
         self.result_tab_layout.addWidget(self.result_figure)
         self.result_tab_layout.addLayout(self.result_tab_layout_h)
         self.result_tab_layout_h.addWidget(self.export_protocol_button)
         self.export_protocol_button.clicked.connect(self.on_export_protocol_click)
+        self.result_tab_layout_h.addWidget(self.export_to_json_button)
+        self.export_to_json_button.clicked.connect(self.on_export_to_json_click)
         self.result_tab_layout_h.addStretch()
         self.export_protocol_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
         self.export_protocol_shortcut.activated.connect(self.on_export_protocol_click)
@@ -1561,7 +1642,7 @@ class ProjectiveCorrUi(QWidget):
             table_data = [
                 ["DUGR", str(self.DUGR)],
                 ["A_new", str(self.A_new) + " [mm^2]"],
-                ["k^2", str(self.k_square)],  # this
+                ["k^2", str(self.k_square)],
                 ["A_eff", str(self.Aeff) + " [mm^2]"],
                 ["L_eff", str(self.Leff) + " [cd/m^2]"],
                 ["A", str(self.A) + " [mm^2]"],
@@ -1574,6 +1655,19 @@ class ProjectiveCorrUi(QWidget):
                 ["luminaire width", str(self.luminaire_width) + " [mm]"],
                 ["luminaire height", str(self.luminaire_height) + " [mm]"],
             ]
+
+            data = {'Parameter': ['DUGR', 'A_new', 'k^2', 'A_eff', 'L_eff', 'A', 'L_s', 'lum_th', 'FWHM',
+                                  'Filter_width', 'Filter_sigma', 'Border_size', 'luminaire_width', 'luminaire_height'],
+
+                    'Value': [self.DUGR, self.A_new, self.k_square, self.Aeff, self.Leff, self.A, self.Ls, self.lum_th,
+                              self.FWHM, self.filter_width, self.sigma, self.border_size, self.luminaire_width,
+                              self.luminaire_height],
+
+                    'Unit': ['None', 'mm^2', 'None', 'mm^2', 'cd/m^2', 'mm^2', 'cd/m^2', 'cd/m^2', 'px', 'px', 'px',
+                             'px', 'mm', 'mm']
+                    }
+
+            self.df = pd.DataFrame(data)
 
             self.result_figure.figure.clf()
             self._result_ax = self.result_figure.figure.subplots()
@@ -1596,6 +1690,12 @@ class ProjectiveCorrUi(QWidget):
             pdf.savefig(self.binarize_figure.figure)
             pdf.savefig(self.result_figure.figure)
             pdf.close()
+
+    def on_export_to_json_click(self):
+        json_file = QFileDialog.getSaveFileName(self, "Export File", "", "*.json")[0]
+        if json_file:
+            self.df.to_json(json_file)
+            self.status_bar.showMessage('Export to *.json File successful')
 
 
 class RectangularRoi:
