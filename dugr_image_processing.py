@@ -284,14 +284,19 @@ def execute_projective_dist_algorithm(src_image, viewing_distance, luminous_area
     #  Define lists to store parameters corresponding to the pixel values of the threshold
     binarized_img = []
     eff_solid_angle_values = []
-    for filtered_image_roi in filtered_img:
+    for count, filtered_image_roi in enumerate(filtered_img):
         binarized_img_roi = np.zeros(filtered_image_roi.shape)
 
         for i in range(filtered_image_roi.shape[0]):
             for j in range(filtered_image_roi.shape[1]):
                 if filtered_image_roi[i][j] >= 500:
                     binarized_img_roi[i][j] = filtered_image_roi[i][j]
-                    eff_solid_angle_values.append(omega[i][j])
+                    if filter_flag:
+                        eff_solid_angle_values.append(omega[i + int(rois[count].top_left[1] - ceil(filter_width / 2))]
+                                                      [j + int(rois[count].top_left[0] - ceil(filter_width / 2))])
+                    else:
+                        eff_solid_angle_values.append(omega[i][j])
+
         binarized_img.append(binarized_img_roi)
 
     #  Calculate the effective solid angel by calculating the sum of the pixel solid angles over the luminance threshold
