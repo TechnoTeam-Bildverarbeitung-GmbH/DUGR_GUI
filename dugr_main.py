@@ -831,42 +831,94 @@ class ProjectiveDistUi(QWidget):
             self.df = pd.DataFrame(data)
 
         self.filtered_image_figure.figure.clf()
-        self._filtered_image_ax = self.filtered_image_figure.figure.subplots()
-        if self.filter_only_roi_flag:
-            if self.roi_shape_flag == "Trapezoid":
-                self._filtered_image_ax.plot((self.rois[0].top_left[0], self.rois[0].top_right[0]),
-                                             (self.rois[0].top_left[1], self.rois[0].top_right[1]), color='red')
-                self._filtered_image_ax.plot((self.rois[0].top_right[0], self.rois[0].bottom_right[0]),
-                                             (self.rois[0].top_right[1], self.rois[0].bottom_right[1]), color='red')
-                self._filtered_image_ax.plot((self.rois[0].bottom_right[0], self.rois[0].bottom_left[0]),
-                                             (self.rois[0].bottom_right[1], self.rois[0].bottom_left[1]), color='red')
-                self._filtered_image_ax.plot((self.rois[0].bottom_left[0], self.rois[0].top_left[0]),
-                                             (self.rois[0].bottom_left[1], self.rois[0].top_left[1]), color='red')
-        self.filtered_image_plot = self._filtered_image_ax.imshow(self.filtered_image,
-                                                                  norm=LogNorm(
-                                                                      vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                                  cmap=ls_cmap)
-        self.filtered_image_figure.figure.colorbar(self.filtered_image_plot, ax=self._filtered_image_ax, fraction=0.04,
-                                                   pad=0.035, label="[cd/m^2]")
+        self._filtered_image_ax = self.filtered_image_figure.figure.subplots(len(self.filtered_image))
+
+        if len(self.filtered_image) == 1:
+            self.filtered_image_plot = self._filtered_image_ax.imshow(self.filtered_image[0],
+                                                                         norm=LogNorm(
+                                                                            vmin=self.vmin,
+                                                                            vmax=np.max(self.source_image)),
+                                                                         cmap=ls_cmap)
+            self.filtered_image_figure.figure.colorbar(self.filtered_image_plot, ax=self._filtered_image_ax,
+                                                       fraction=0.04, pad=0.035, label="[cd/m^2]")
+
+        else:
+            for i in range(len(self.filtered_image)):
+                self.filtered_image_plot = self._filtered_image_ax[i].imshow(self.filtered_image[i],
+                                                                             norm=LogNorm(
+                                                                                vmin=self.vmin,
+                                                                                vmax=np.max(self.source_image)),
+                                                                             cmap=ls_cmap)
+                self.filtered_image_figure.figure.colorbar(self.filtered_image_plot, ax=self._filtered_image_ax[i],
+                                                           fraction=0.04, pad=0.035, label="[cd/m^2]")
+                # if self.roi_shape_flag == "Trapezoid":
+                #     roi_x_anchor = min(self.rois[i].top_left[0], self.rois.bottom_left[0])
+                #     roi_y_anchor = min(self.rois[i].top_left[1], self.rois.top_right[0])
+                #     self._filtered_image_ax[i].plot((self.rois[i].top_left[0] - roi_x_anchor,
+                #                                      self.rois[i].top_right[0] - roi_x_anchor),
+                #                                     (self.rois[i].top_left[1] - roi_y_anchor,
+                #                                      self.rois[i].top_right[1] - roi_y_anchor), color='red')
+                #     self._filtered_image_ax[i].plot((self.rois[i].top_right[0] - roi_x_anchor,
+                #                                      self.rois[i].bottom_right[0] - roi_x_anchor),
+                #                                     (self.rois[i].top_right[1] - roi_y_anchor,
+                #                                      self.rois[i].bottom_right[1] - roi_y_anchor),
+                #                                     color='red')
+                #     self._filtered_image_ax[i].plot((self.rois[i].bottom_right[0] - roi_x_anchor,
+                #                                      self.rois[i].bottom_left[0] - roi_x_anchor),
+                #                                     (self.rois[i].bottom_right[1] - roi_y_anchor,
+                #                                      self.rois[i].bottom_left[1] - roi_y_anchor),
+                #                                     color='red')
+                #     self._filtered_image_ax[i].plot((self.rois[i].bottom_left[0] - roi_x_anchor,
+                #                                      self.rois[i].top_left[0] - roi_x_anchor),
+                #                                     (self.rois[i].bottom_left[1] - roi_y_anchor,
+                #                                      self.rois[i].top_left[1] - roi_y_anchor), color='red')
+
+        self.filtered_image_figure.draw()
 
         self.binarized_image_figure.figure.clf()
-        self._binarized_image_ax = self.binarized_image_figure.figure.subplots()
-        if self.filter_only_roi_flag:
-            if self.roi_shape_flag == "Trapezoid":
-                self._binarized_image_ax.plot((self.rois[0].top_left[0], self.rois[0].top_right[0]),
-                                             (self.rois[0].top_left[1], self.rois[0].top_right[1]), color='red')
-                self._binarized_image_ax.plot((self.rois[0].top_right[0], self.rois[0].bottom_right[0]),
-                                             (self.rois[0].top_right[1], self.rois[0].bottom_right[1]), color='red')
-                self._binarized_image_ax.plot((self.rois[0].bottom_right[0], self.rois[0].bottom_left[0]),
-                                             (self.rois[0].bottom_right[1], self.rois[0].bottom_left[1]), color='red')
-                self._binarized_image_ax.plot((self.rois[0].bottom_left[0], self.rois[0].top_left[0]),
-                                             (self.rois[0].bottom_left[1], self.rois[0].top_left[1]), color='red')
-        self.binarized_image_plot = self._binarized_image_ax.imshow(self.binarized_image,
-                                                                    norm=LogNorm(
-                                                                        vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                                    cmap=ls_cmap)
-        self.binarized_image_figure.figure.colorbar(self.binarized_image_plot, ax=self._binarized_image_ax,
-                                                    fraction=0.04, pad=0.035, label="[cd/m^2]")
+        self._binarized_image_ax = self.binarized_image_figure.figure.subplots(len(self.binarized_image))
+
+        if len(self.binarized_image) == 1:
+            self.binarized_image_plot = self._binarized_image_ax.imshow(self.binarized_image[0],
+                                                                           norm=LogNorm(
+                                                                                vmin=self.vmin,
+                                                                                vmax=np.max(self.source_image)),
+                                                                           cmap=ls_cmap)
+            self.binarized_image_figure.figure.colorbar(self.binarized_image_plot, ax=self._binarized_image_ax,
+                                                        fraction=0.04, pad=0.035, label="[cd/m^2]")
+
+        else:
+            for i in range(len(self.binarized_image)):
+                self.binarized_image_plot = self._binarized_image_ax[i].imshow(self.binarized_image[i],
+                                                                               norm=LogNorm(
+                                                                                    vmin=self.vmin,
+                                                                                    vmax=np.max(self.source_image)),
+                                                                               cmap=ls_cmap)
+                self.binarized_image_figure.figure.colorbar(self.binarized_image_plot, ax=self._binarized_image_ax[i],
+                                                            fraction=0.04, pad=0.035, label="[cd/m^2]")
+                # if self.roi_shape_flag == "Trapezoid":
+                #     roi_x_anchor = min(self.rois[i].top_left[0], self.rois.bottom_left[0])
+                #     roi_y_anchor = min(self.rois[i].top_left[1], self.rois.top_right[0])
+                #     self._binarized_image_ax[i].plot((self.rois[i].top_left[0] - roi_x_anchor,
+                #                                      self.rois[i].top_right[0] - roi_x_anchor),
+                #                                     (self.rois[i].top_left[1] - roi_y_anchor,
+                #                                      self.rois[i].top_right[1] - roi_y_anchor), color='red')
+                #     self._binarized_image_ax[i].plot((self.rois[i].top_right[0] - roi_x_anchor,
+                #                                      self.rois[i].bottom_right[0] - roi_x_anchor),
+                #                                     (self.rois[i].top_right[1] - roi_y_anchor,
+                #                                      self.rois[i].bottom_right[1] - roi_y_anchor),
+                #                                     color='red')
+                #     self._binarized_image_ax[i].plot((self.rois[i].bottom_right[0] - roi_x_anchor,
+                #                                      self.rois[i].bottom_left[0] - roi_x_anchor),
+                #                                     (self.rois[i].bottom_right[1] - roi_y_anchor,
+                #                                      self.rois[i].bottom_left[1] - roi_y_anchor),
+                #                                     color='red')
+                #     self._binarized_image_ax[i].plot((self.rois[i].bottom_left[0] - roi_x_anchor,
+                #                                      self.rois[i].top_left[0] - roi_x_anchor),
+                #                                     (self.rois[i].bottom_left[1] - roi_y_anchor,
+                #                                      self.rois[i].top_left[1] - roi_y_anchor), color='red')
+
+        self.binarized_image_figure.draw()
 
         self.result_figure.figure.clf()
         self._result_ax = self.result_figure.figure.subplots()
@@ -913,8 +965,10 @@ class ProjectiveCorrUi(QWidget):
         # Parameters
         self.lum_th = 500
         self.FWHM = 12
-        self.luminaire_width = 0
-        self.luminaire_height = 0
+        self.rectification_width = 0
+        self.rectification_height = 0
+        self.luminous_area_width = 0
+        self.luminous_area_height = 0
         self.measurement_distance = 0
         self.A = 0
         self.Ls = 0
@@ -991,21 +1045,41 @@ class ProjectiveCorrUi(QWidget):
         self.FWHM_line_box.setText(str(self.FWHM))
         self.FWHM_line_box.textChanged.connect(self.on_fwhm_change)
 
-        # Luminaire width Label + Line Box
-        luminaire_width_label = QLabel("Width [mm]")
-        layout2.addWidget(luminaire_width_label)
-        self.luminaire_width_line_box = QLineEdit()
-        layout2.addWidget(self.luminaire_width_line_box)
-        self.luminaire_width_line_box.setText(str(self.luminaire_width))
-        self.luminaire_width_line_box.textChanged.connect(self.on_luminaire_width_change)
+        # Rectification width Label + Line Box
+        rectification_width_label = QLabel("Rectification Width [mm]")
+        layout2.addWidget(rectification_width_label)
+        self.rectification_width_line_box = QLineEdit()
+        layout2.addWidget(self.rectification_width_line_box)
+        self.rectification_width_line_box.setText(str(self.rectification_width))
+        self.rectification_width_line_box.textChanged.connect(self.on_rectification_width_change)
 
-        # Luminaire height Label + Line Box
-        luminaire_height_label = QLabel("Height [mm]")
-        layout2.addWidget(luminaire_height_label)
-        self.luminaire_height_line_box = QLineEdit()
-        layout2.addWidget(self.luminaire_height_line_box)
-        self.luminaire_height_line_box.setText(str(self.luminaire_height))
-        self.luminaire_height_line_box.textChanged.connect(self.on_luminaire_height_change)
+        # Rectification height Label + Line Box
+        rectification_height_label = QLabel("Rectification Height [mm]")
+        layout2.addWidget(rectification_height_label)
+        self.rectification_height_line_box = QLineEdit()
+        layout2.addWidget(self.rectification_height_line_box)
+        self.rectification_height_line_box.setText(str(self.rectification_height))
+        self.rectification_height_line_box.textChanged.connect(self.on_rectification_height_change)
+
+        # Checkbox to allow usage of the luminous area parameters
+        self.check_box_use_luminous_area = QCheckBox("Use Luminous Area Parameters", self)
+        layout2.addWidget(self.check_box_use_luminous_area)
+
+        # Luminous area width label + Line Box
+        luminous_area_width_label = QLabel("Luminous Area Width [mm]")
+        layout2.addWidget(luminous_area_width_label)
+        self.luminous_area_width_line_box = QLineEdit()
+        layout2.addWidget(self.luminous_area_width_line_box)
+        self.luminous_area_width_line_box.setText(str(self.luminous_area_width))
+        self.luminous_area_width_line_box.textChanged.connect(self.on_luminous_area_width_change)
+
+        # Luminous area height label + Line Box
+        luminous_area_height_label = QLabel("Luminous Area Height [mm]")
+        layout2.addWidget(luminous_area_height_label)
+        self.luminous_area_height_line_box = QLineEdit()
+        layout2.addWidget(self.luminous_area_height_line_box)
+        self.luminous_area_height_line_box.setText(str(self.luminous_area_height))
+        self.luminous_area_height_line_box.textChanged.connect(self.on_luminous_area_height_change)
 
         layout2.addStretch()
 
@@ -1079,10 +1153,13 @@ class ProjectiveCorrUi(QWidget):
         mpl_rectified_toolbar = NavigationToolbar2QT(self.rectified_figure, self)
         self.clear_roi_selection_button = QPushButton("Clear ROI selection", self)
         self.clear_roi_selection_button.clicked.connect(self.callback_clear_roi_selection)
+        self.use_whole_image_button = QPushButton("Use the whole rectified image", self)
+        self.use_whole_image_button.clicked.connect(self.on_use_whole_image_click)
         self.rectified_tab_layout.addWidget(mpl_rectified_toolbar)
         self.rectified_tab_layout.addWidget(self.rectified_figure)
         self.rectified_tab_layout.addLayout(self.rectified_tab_layout_h)
         self.rectified_tab_layout_h.addWidget(self.clear_roi_selection_button)
+        self.rectified_tab_layout_h.addWidget(self.use_whole_image_button)
         self.rectified_tab_layout_h.addStretch()
 
         # Regions of interest Tab
@@ -1208,8 +1285,13 @@ class ProjectiveCorrUi(QWidget):
                     self.source_figure.figure.colorbar(self.src_plot, ax=self._source_ax, fraction=0.04, pad=0.035,
                                                        label="cd/m^2")
                 else:
-                    self.src_plot.set_data(self.source_image)
-                    self.src_plot.autoscale()
+                    self.source_figure.figure.clf()
+                    self._source_ax = self.source_figure.figure.subplots()
+                    self.src_plot = self._source_ax.imshow(self.source_image,
+                                                           norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                           cmap=ls_cmap)
+                    self.source_figure.figure.colorbar(self.src_plot, ax=self._source_ax, fraction=0.04, pad=0.035,
+                                                       label="cd/m^2")
                 self.source_figure.draw()
                 self.status_bar.showMessage('File import successful')
         else:
@@ -1227,16 +1309,16 @@ class ProjectiveCorrUi(QWidget):
         self.projective_rect[1] = self.vertices[np.argmin(diff)]  # top right = smallest difference
         self.projective_rect[3] = self.vertices[np.argmax(diff)]  # bottom left = largest difference
 
-        edge_width_front = round(self.luminaire_width / (self.projective_rect[2][0] - self.projective_rect[3][0]), 4)
-        edge_width_back = round(self.luminaire_width / (self.projective_rect[1][0] - self.projective_rect[0][0]), 4)
+        edge_width_front = round(self.rectification_width / (self.projective_rect[2][0] - self.projective_rect[3][0]), 4)
+        edge_width_back = round(self.rectification_width / (self.projective_rect[1][0] - self.projective_rect[0][0]), 4)
 
         cathete_left1 = self.projective_rect[3][1] - self.projective_rect[0][1]
         cathete_left2 = self.projective_rect[0][0] - self.projective_rect[3][0]
-        edge_height_left = round(self.luminaire_height / math.sqrt(cathete_left1 ** 2 + cathete_left2 ** 2), 4)
+        edge_height_left = round(self.rectification_height / math.sqrt(cathete_left1 ** 2 + cathete_left2 ** 2), 4)
 
         cathete_right1 = self.projective_rect[2][1] - self.projective_rect[1][1]
         cathete_right2 = self.projective_rect[2][0] - self.projective_rect[1][0]
-        edge_height_right = round(self.luminaire_height / math.sqrt(cathete_right1 ** 2 + cathete_right2 ** 2), 4)
+        edge_height_right = round(self.rectification_height / math.sqrt(cathete_right1 ** 2 + cathete_right2 ** 2), 4)
 
         if max(edge_width_front, edge_width_back, edge_height_left, edge_height_right) <= 1.2:
             self.status_bar.showMessage("Polygon selection successful     " +
@@ -1281,18 +1363,18 @@ class ProjectiveCorrUi(QWidget):
             self.status_bar.showMessage('In order to execute the projective correction the edge points have to be drawn'
                                         ' onto the source image first')
             return
-        if self.luminaire_width == 0:
+        if self.rectification_width == 0:
             self.status_bar.showMessage('In order to execute the projective correction the luminaire width has to be'
                                         ' defined')
             return
-        if self.luminaire_height == 0:
+        if self.rectification_height == 0:
             self.status_bar.showMessage('In order to execute the projective correction the luminaire height has to be'
                                         ' defined')
             return
         self.rectified_image = dugr_image_processing.projective_rectification(self.source_image,
                                                                               self.projective_rect,
-                                                                              self.luminaire_width,
-                                                                              self.luminaire_height)
+                                                                              self.rectification_width,
+                                                                              self.rectification_height)
         if self.rect_plot is None:
             self.rect_plot = self._rectified_ax.imshow(self.rectified_image,
                                                        norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
@@ -1308,6 +1390,11 @@ class ProjectiveCorrUi(QWidget):
                                                   label="cd/m^2")
         self.rectified_figure.draw()
         self.status_bar.showMessage("Projective Transformation successful")
+
+    def on_use_whole_image_click(self):
+        self.click = [0, 0]
+        self.release = [self.rectified_image.shape[1], self.rectified_image.shape[0]]
+        self.on_safe_roi_click()
 
     def on_luminance_threshold_change(self):
         userinput = self.luminance_threshold_line_box.text()
@@ -1326,17 +1413,29 @@ class ProjectiveCorrUi(QWidget):
                                         str(self.sigma) + ";     Filter width: " +
                                         str(self.filter_width) + ";     Border size: " + str(self.border_size))
 
-    def on_luminaire_width_change(self):
-        userinput = self.luminaire_width_line_box.text()
+    def on_rectification_width_change(self):
+        userinput = self.rectification_width_line_box.text()
         if userinput.isdigit():
-            self.luminaire_width = int(userinput)
-            self.status_bar.showMessage("Luminaire width successfully changed to: " + str(self.luminaire_width))
+            self.rectification_width = int(userinput)
+            self.status_bar.showMessage("Luminaire width successfully changed to: " + str(self.rectification_width))
 
-    def on_luminaire_height_change(self):
-        userinput = self.luminaire_height_line_box.text()
+    def on_rectification_height_change(self):
+        userinput = self.rectification_height_line_box.text()
         if userinput.isdigit():
-            self.luminaire_height = int(userinput)
-            self.status_bar.showMessage("Luminaire height successfully changed to: " + str(self.luminaire_height))
+            self.rectification_height = int(userinput)
+            self.status_bar.showMessage("Luminaire height successfully changed to: " + str(self.rectification_height))
+
+    def on_luminous_area_width_change(self):
+        userinput = self.luminous_area_width_line_box.text()
+        if userinput.isdigit():
+            self.luminous_area_width = int(userinput)
+            self.status_bar.showMessage("Luminaire width successfully changed to: " + str(self.luminous_area_width))
+
+    def on_luminous_area_height_change(self):
+        userinput = self.luminous_area_height_line_box.text()
+        if userinput.isdigit():
+            self.luminous_area_height = int(userinput)
+            self.status_bar.showMessage("Luminaire height successfully changed to: " + str(self.luminous_area_height))
 
     def on_roi_shape_change(self, shape):
         self.roi_shape_flag = shape
@@ -1366,7 +1465,7 @@ class ProjectiveCorrUi(QWidget):
         if self.rectified_image is None:
             self.status_bar.showMessage("In order to safe ROIs you have to execute the projective correction first")
             return
-        if not np.any(self.click):
+        if not np.any(self.click) and not np.any(self.release):
             self.status_bar.showMessage("In order to safe ROIs you have to draw them onto the projective corrected "
                                         "image first")
             return
@@ -1502,8 +1601,8 @@ class ProjectiveCorrUi(QWidget):
         warped_border_image = dugr_image_processing.projective_rectification_with_borders(self.source_image,
                                                                                           self.projective_rect,
                                                                                           self.border_size,
-                                                                                          self.luminaire_width,
-                                                                                          self.luminaire_height)
+                                                                                          self.rectification_width,
+                                                                                          self.rectification_height)
         self.filtered_image = dugr_image_processing.filter_image(warped_border_image, self.filter_width, self.sigma)
         self.filter_image_figure.figure.clf()
         self._filter_ax = self.filter_image_figure.figure.subplots()
@@ -1633,6 +1732,9 @@ class ProjectiveCorrUi(QWidget):
                 self.Leff = self.Leff + Leff_roi
             self.Leff = round((self.Leff / len(self.binarized_rois)), 2)
 
+            if self.check_box_use_luminous_area.isChecked():
+                self.A = self.luminous_area_width * self.luminous_area_height
+
             self.k_square = round(((self.Leff ** 2 * self.Aeff) / (self.Ls ** 2 * self.A)), 4)
 
             self.A_new = round((self.A / self.k_square), 2)
@@ -1652,16 +1754,16 @@ class ProjectiveCorrUi(QWidget):
                 ["Filter width", str(self.filter_width) + " [mm]"],
                 ["Filter sigma", str(self.sigma) + " [mm]"],
                 ["Border size", str(self.border_size) + " [mm]"],
-                ["luminaire width", str(self.luminaire_width) + " [mm]"],
-                ["luminaire height", str(self.luminaire_height) + " [mm]"],
+                ["luminaire width", str(self.rectification_width) + " [mm]"],
+                ["luminaire height", str(self.rectification_height) + " [mm]"],
             ]
 
             data = {'Parameter': ['DUGR', 'A_new', 'k^2', 'A_eff', 'L_eff', 'A', 'L_s', 'lum_th', 'FWHM',
-                                  'Filter_width', 'Filter_sigma', 'Border_size', 'luminaire_width', 'luminaire_height'],
+                                  'Filter_width', 'Filter_sigma', 'Border_size', 'rectification_width', 'rectification_height'],
 
                     'Value': [self.DUGR, self.A_new, self.k_square, self.Aeff, self.Leff, self.A, self.Ls, self.lum_th,
-                              self.FWHM, self.filter_width, self.sigma, self.border_size, self.luminaire_width,
-                              self.luminaire_height],
+                              self.FWHM, self.filter_width, self.sigma, self.border_size, self.rectification_width,
+                              self.rectification_height],
 
                     'Unit': ['None', 'mm^2', 'None', 'mm^2', 'cd/m^2', 'mm^2', 'cd/m^2', 'cd/m^2', 'px', 'px', 'px',
                              'px', 'mm', 'mm']
@@ -1761,31 +1863,22 @@ class TrapezoidRoi:
         self.width_bottom = self.bottom_right[0] - self.bottom_left[0]
         self.width_top = self.top_right[0] - self.top_left[0]
 
-        if self.width_top > self.width_bottom:
-            self.bounding_box = src_image[int(self.top_left[1]):int(self.bottom_left[1]),
-                                          int(self.top_left[0]):int(self.top_right[0])]
+        self.x_anchor = min(self.top_left[0], self.top_right[0], self.bottom_right[0], self.bottom_left[0])
+        self.y_anchor = min(self.top_left[1], self.top_right[1], self.bottom_right[1], self.bottom_left[1])
 
-            self.d1_x = [0, self.top_right[0] - self.top_left[0]]
-            self.d1_y = [0, 0]
-            self.d2_x = [self.top_right[0] - self.top_left[0], self.bottom_right[0] - self.top_left[0]]
-            self.d2_y = [0, self.bottom_left[1] - self.top_left[1]]
-            self.d3_x = [self.bottom_right[0] - self.top_left[0], self.bottom_left[0] - self.top_left[0]]
-            self.d3_y = [self.bottom_left[1] - self.top_left[1], self.bottom_left[1] - self.top_left[1]]
-            self.d4_x = [self.bottom_left[0] - self.top_left[0], 0]
-            self.d4_y = [self.bottom_left[1] - self.top_left[1], 0]
+        self.d1_x = [self.top_left[0] - self.x_anchor, self.top_right[0] - self.x_anchor]
+        self.d1_y = [self.top_left[1] - self.y_anchor, self.top_right[1] - self.y_anchor]
+        self.d2_x = [self.top_right[0] - self.x_anchor, self.bottom_right[0] - self.x_anchor]
+        self.d2_y = [self.top_right[1] - self.y_anchor, self.bottom_right[1] - self.y_anchor]
+        self.d3_x = [self.bottom_right[0] - self.x_anchor, self.bottom_left[0] - self.x_anchor]
+        self.d3_y = [self.bottom_right[1] - self.y_anchor, self.bottom_left[1] - self.y_anchor]
+        self.d4_x = [self.bottom_left[0] - self.x_anchor, self.top_left[0] - self.x_anchor]
+        self.d4_y = [self.bottom_left[1] - self.y_anchor, self.top_left[1] - self.y_anchor]
 
-        elif self.width_top <= self.width_bottom:
-            self.bounding_box = src_image[int(self.top_left[1]):int(self.bottom_left[1]),
-                                          int(self.bottom_left[0]):int(self.bottom_right[0])]
-
-            self.d1_x = [self.top_left[0] - self.bottom_left[0], self.top_right[0] - self.bottom_left[0]]
-            self.d1_y = [0, 0]
-            self.d2_x = [self.top_right[0] - self.bottom_left[0], self.bottom_right[0] - self.bottom_left[0]]
-            self.d2_y = [0, self.bottom_left[1] - self.top_left[1]]
-            self.d3_x = [self.bottom_right[0] - self.bottom_left[0], 0]
-            self.d3_y = [self.bottom_left[1] - self.top_left[1], self.bottom_left[1] - self.top_left[1]]
-            self.d4_x = [0, self.top_left[0] - self.bottom_left[0]]
-            self.d4_y = [self.bottom_left[1] - self.top_left[1], 0]
+        self.bounding_box = src_image[int(min(self.top_left[1], self.top_right[1])):int(max(self.bottom_left[1],
+                                                                                            self.bottom_right[1])),
+                                      int(min(self.top_left[0], self.bottom_left[0])):int(max(self.top_right[0],
+                                                                                              self.bottom_right[0]))]
 
         self.height_left = self.bottom_left[1] - self.top_left[1]
         self.height_right = self.bottom_right[1] - self.top_right[1]

@@ -260,60 +260,48 @@ def execute_projective_dist_algorithm(src_image, viewing_distance, luminous_area
     omega = theta_diff_arc_by_cart_dist * sin_theta_rad
 
     #  Filter the image based on the filter parameters calculated
+    filtered_img = []
     if not filter_flag:
-        filtered_img = filter_image(src_image, filter_width, sigma)
+        filtered_img.append(filter_image(src_image, filter_width, sigma))
     elif filter_flag:
         for i in range(len(rois)):
             if type(rois[i]).__name__ == 'TrapezoidRoi':
-                if rois[i].width_top > rois[i].width_bottom:
-                    filtered_img = filter_image(
-                        src_image[int(rois[i].top_left[1] - ceil(filter_width/2)):int(rois[i].bottom_left[1] + ceil(filter_width/2)),
-                                  int(rois[i].top_left[0] - ceil(filter_width/2)):int(rois[i].top_right[0] + ceil(filter_width/2))],
-                        filter_width, sigma)
-                elif rois[i].width_top <= rois[i].width_bottom:
-                    filtered_img = filter_image(
-                        src_image[int(rois[i].top_left[1] - ceil(filter_width/2)):int(rois[i].bottom_left[1] + ceil(filter_width/2)),
-                                  int(rois[i].bottom_left[0] - ceil(filter_width/2)):int(rois[i].bottom_right[0] + ceil(filter_width/2))],
-                        filter_width, sigma)
+                filtered_img_roi = filter_image(
+                    src_image[int(min(rois[i].top_left[1], rois[i].top_right[1]) - ceil(filter_width/2)):int(
+                        max(rois[i].bottom_left[1], rois[i].bottom_right[1]) + ceil(filter_width/2)),
+                              int(min(rois[i].top_left[0], rois[i].bottom_left[0]) - ceil(filter_width/2)):int(
+                                  max(rois[i].top_right[0], rois[i].bottom_right[0]) + ceil(filter_width/2))],
+                    filter_width, sigma)
+                filtered_img.append(filtered_img_roi)
+
             elif type(rois[i]).__name__ == 'RectangularRoi' or type(rois[i]).__name__ == 'CircularRoi':
-                filtered_img = filter_image(
+                filtered_img_roi = filter_image(
                     src_image[int(rois[i].top_left[1] - ceil(filter_width / 2)):int(rois[i].bottom_left[1] + ceil(filter_width / 2)),
                               int(rois[i].top_left[0] - ceil(filter_width / 2)):int(rois[i].top_right[0] + ceil(filter_width / 2))],
                     filter_width, sigma)
+                filtered_img.append(filtered_img_roi)
 
     #  Define lists to store parameters corresponding to the pixel values of the threshold
-    binarized_img = np.zeros(filtered_img.shape)
-    under_th_filtered = []
+    binarized_img = []
     eff_solid_angle_values = []
+    for filtered_image_roi in filtered_img:
+        binarized_img_roi = np.zeros(filtered_image_roi.shape)
 
-    for i in range(filtered_img.shape[0]):
-        for j in range(filtered_img.shape[1]):
-            if filtered_img[i][j] >= 500:
-                binarized_img[i][j] = filtered_img[i][j]
-                eff_solid_angle_values.append(omega[i][j])
-            else:
-                under_th_filtered.append(filtered_img[i][j])
-
-    #  Calculate ambient luminance --> Luminance values smaller than the threshold
-    # l_b = np.mean(np.array(under_th_filtered))
-
-    #  Get the coordinates of the luminance center of mass
-    # center_x, center_y = get_center_of_mass(x_coordinates, y_coordinates, over_th_filtered)
-
-    # Get the phi angle of the luminance center of mass
-    # phi_p = phi[round(center_y)][round(center_x)]
-
-    # Get the Theta angle of the luminance center of mass
-    # theta_p = theta[round(center_y)][round(center_x)]
-
-    # Calculate the positional index of the luminance center of mass
-    # p_i = calculate_positional_index(phi_p, theta_p)
+        for i in range(filtered_image_roi.shape[0]):
+            for j in range(filtered_image_roi.shape[1]):
+                if filtered_image_roi[i][j] >= 500:
+                    binarized_img_roi[i][j] = filtered_image_roi[i][j]
+                    eff_solid_angle_values.append(omega[i][j])
+        binarized_img.append(binarized_img_roi)
 
     #  Calculate the effective solid angel by calculating the sum of the pixel solid angles over the luminance threshold
     omega_eff = np.sum(np.array(eff_solid_angle_values))
 
     # Calculate the effective luminance by calculating the sum of the luminance values over the threshold
-    l_eff = binarized_img[binarized_img != 0].mean()
+    l_eff = []
+    for binarized_img_roi in binarized_img:
+        l_eff.append(binarized_img_roi[binarized_img_roi != 0].mean())
+    l_eff = np.array(l_eff).mean()
 
     # Calculate the mean luminance l_s of the whole luminaire
     # Calculate the solid angle omega_l of the whole luminaire
@@ -369,10 +357,6 @@ def execute_projective_dist_algorithm(src_image, viewing_distance, luminous_area
 
     # Calculate the DUGR value
     dugr = 8 * log(k_square, 10)
-    # if debug:
-    #     return theta, phi, sin_theta_rad, theta_filtered_h, theta_filtered_v, pow_theta_filtered_h,\
-    #            pow_theta_filtered_v, theta_add, theta_diff, theta_diff_arc, cart_dist_img, theta_diff_arc_by_cart_dist,\
-    #            omega, filtered_img, dugr, l_eff, omega_eff, r_o, rb_min, ro_min, fwhm, sigma, filter_width
 
     return dugr, k_square, l_eff, l_s, omega_eff, omega_l, r_o, rb_min, ro_min, fwhm, sigma, filter_width,\
         filtered_img, binarized_img
