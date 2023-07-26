@@ -9,5 +9,5 @@ or write an E-Mail to me:
 valentin.siebenkees@technoteam.de
 
 ## Installation:
-you can either download the Code here from Github or grab the version you like from the following cloud link (installer included for newer versions)
+you can either download the Code here from Github or grab the version you like from the following cloud link (installer included for newer versions):
 https://cloud.tu-ilmenau.de/s/PyG785oapRqCNCM
