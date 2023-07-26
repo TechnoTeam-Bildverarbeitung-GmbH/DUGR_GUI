@@ -1,5 +1,9 @@
 """
 Functions to handle common image formats for DUGR calculation
+
+Currently available:
+    - TechnoTeam Image formats: *.pus, *.pf, *.pcf
+    - Ascii image: A textfile containing the pixel information
 """
 import numpy as np
 import re
@@ -11,7 +15,11 @@ def convert_tt_image_to_numpy_array(image_file: str):
     Function that converts an image from the TechnoTeam image format to a numpy array
 
     Args:
-        image_file: image file in the TechnoTeam image format
+        image_file: image file in one of the TechnoTeam image formats (*.pus, *.pf, *.pcf)
+
+    Returns:
+         image_array: Numpy array containing the pixel information
+         header dict: Dictionary with all the image information stored in the TechnoTeam image headers
     """
 
     if not exists(image_file):
@@ -37,33 +45,46 @@ def convert_tt_image_to_numpy_array(image_file: str):
 
     pixel_data = data[r + 1:]
 
-    #  Camera Image
-    if header_dict['Typ'] == 'Pic98::TPlane<unsigned short>':
-        image_array = np.frombuffer(pixel_data, dtype='<H').reshape(int(header_dict['Lines']),
-                                                                    int(header_dict['Columns']))
+    image_array = np.empty((0, 0))
+    try:
+        #  Camera Image
+        if header_dict['Typ'] == 'Pic98::TPlane<unsigned short>':
+            image_array = np.frombuffer(pixel_data, dtype='<H').reshape(int(header_dict['Lines']),
+                                                                        int(header_dict['Columns']))
 
-    #  Luminance Image
-    elif header_dict['Typ'] == "Pic98::TPlane<float>":
-        image_array = np.frombuffer(pixel_data, dtype=np.float32).reshape(int(header_dict['Lines']),
-                                                                          int(header_dict['Columns']))
+        #  Luminance Image
+        elif header_dict['Typ'] == "Pic98::TPlane<float>":
+            image_array = np.frombuffer(pixel_data, dtype=np.float32).reshape(int(header_dict['Lines']),
+                                                                              int(header_dict['Columns']))
 
-    # Color Image
-    elif header_dict['Typ'] == "Pic98::TPlane<Pic98::TRGBFloatPixel>":
-        image_array = np.frombuffer(pixel_data, dtype=np.float32).reshape(int(header_dict['Lines']),
-                                                                          int(header_dict['Columns']), 3)
+        # Color Image
+        elif header_dict['Typ'] == "Pic98::TPlane<Pic98::TRGBFloatPixel>":
+            image_array = np.frombuffer(pixel_data, dtype=np.float32).reshape((int(header_dict['Lines']),
+                                                                               int(header_dict['Columns'])), 3)
+    except KeyError:
+        print("The file type is one of the expected TechnoTeam formats (*.pus, *.pf. *.pcf)"
+              "\nBut the header seems to be corrupted"
+              "\nThe image type is not defined in the header")
+        image_array = np.empty((0, 0))
+        return image_array, header_dict
 
     return image_array, header_dict
 
 
-def convert_ascii_image_to_numpy_array(image_file):
+def convert_ascii_image_to_numpy_array(image_file: str):
     """
-
     Function that converts an image from ascii format to a numpy array
 
     Args:
-        image_file: Path to the image in the ascii format
+        image_file: Path to the image in the ascii format (*.txt). Each new line represents a new image row.
 
+    Returns:
+        image_array: Numpy array containing the pixel information
     """
+
+    if image_file[-3:] != 'txt':
+        print("The entered image file has to be of type *.txt")
+        return np.empty((0, 0)), {}
 
     with open(image_file, "r") as file_object:
         pixel_values = file_object.read()
