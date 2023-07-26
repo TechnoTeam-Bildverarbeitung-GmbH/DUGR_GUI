@@ -313,12 +313,6 @@ class ProjectiveDistUi(QWidget):
         self.tabs.addTab(self.result_figure_tab, "Result")
         layout3.addWidget(self.tabs)
 
-        self._source_ax = self.source_figure.figure.subplots()
-        # self.shape_selector = RectangleSelector(ax=self._source_ax, onselect=self.on_roi_select, useblit=True,
-        #                                         button=[1, 3], interactive=True, spancoords='pixels')
-        self.shape_selector = PolygonSelector(ax=self._source_ax, onselect=self.on_poly_select, useblit=True,
-                                              props=dict(color='white', linestyle='-', linewidth=2, alpha=0.5))
-
         self.clear_mpl_selection_shortcut = QShortcut(QKeySequence("Escape"), self)
         self.clear_mpl_selection_shortcut.activated.connect(self.clear_mpl_selection)
 
@@ -344,20 +338,13 @@ class ProjectiveDistUi(QWidget):
                                                 'Make sure the file is not corrupted')
                     return
 
-                if self.src_plot is None:
-                    self.src_plot = self._source_ax.imshow(self.source_image,
-                                                           norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                           cmap=custom_colormap.ls_cmap)
-                    self.source_figure.figure.colorbar(self.src_plot, ax=self._source_ax, fraction=0.04, pad=0.035,
-                                                       label="cd/m^2")
-                else:
-                    self.source_figure.figure.clf()
-                    self._source_ax = self.source_figure.figure.subplots()
-                    self.src_plot = self._source_ax.imshow(self.source_image,
-                                                           norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                           cmap=custom_colormap.ls_cmap)
-                    self.source_figure.figure.colorbar(self.src_plot, ax=self._source_ax, fraction=0.04, pad=0.035,
-                                                       label="cd/m^2")
+                self.source_figure.figure.clf()
+                self._source_ax = self.source_figure.figure.subplots()
+                self.src_plot = self._source_ax.imshow(self.source_image,
+                                                       norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                       cmap=custom_colormap.ls_cmap)
+                self.source_figure.figure.colorbar(self.src_plot, ax=self._source_ax, fraction=0.04, pad=0.035,
+                                                   label="cd/m^2")
                 self.source_figure.draw()
                 self.shape_selector = PolygonSelector(ax=self._source_ax, onselect=self.on_poly_select, useblit=True,
                                                       props=dict(color='white', linestyle='-', linewidth=2, alpha=0.5))
@@ -365,17 +352,20 @@ class ProjectiveDistUi(QWidget):
 
             elif image_path[-3:] == "txt":
                 self.source_image = dugr_image_io.convert_ascii_image_to_numpy_array(image_path)
-                self.vmin = np.max(self.source_image) / 10 ** int(self.logarithmic_scaling_flag[-1])
+                try:
+                    self.vmin = np.max(self.source_image) / 10 ** int(self.logarithmic_scaling_flag[-1])
+                except ValueError:
+                    self.status_bar.showMessage('WARNING: The Image you want to load is in one of the supported file '
+                                                'types, but the pixel information is not readable. '
+                                                'Make sure the file is not corrupted')
 
-                if self.src_plot is None:
-                    self.src_plot = self._source_ax.imshow(self.source_image,
-                                                           norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                           cmap=custom_colormap.ls_cmap)
-                    self.source_figure.figure.colorbar(self.src_plot, ax=self._source_ax, fraction=0.04, pad=0.035,
-                                                       label="cd/m^2")
-                else:
-                    self.src_plot.set_data(self.source_image)
-                    self.src_plot.autoscale()
+                self.source_figure.figure.clf()
+                self._source_ax = self.source_figure.figure.subplots()
+                self.src_plot = self._source_ax.imshow(self.source_image,
+                                                       norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                       cmap=custom_colormap.ls_cmap)
+                self.source_figure.figure.colorbar(self.src_plot, ax=self._source_ax, fraction=0.04, pad=0.035,
+                                                   label="cd/m^2")
                 self.source_figure.draw()
                 self.shape_selector = PolygonSelector(ax=self._source_ax, onselect=self.on_poly_select, useblit=True,
                                                       props=dict(color='white', linestyle='-', linewidth=2, alpha=0.5))
@@ -895,18 +885,13 @@ class ProjectiveDistUi(QWidget):
 
     def on_export_protocol_click(self):
 
-        image_file = QFileDialog.getSaveFileName(self, "Export File", "", "*.pdf")[0]
-        if image_file:
-            pdf = PdfPages(image_file)
-
-            self.source_figure.figure.suptitle("Source Image", fontsize=12)
-            self.result_figure.figure.suptitle("Result", fontsize=12)
-
+        protocol_file = QFileDialog.getSaveFileName(self, "Export File", "", "*.pdf")[0]
+        if protocol_file:
+            pdf = PdfPages(protocol_file)
             pdf.savefig(self.source_figure.figure)
             pdf.savefig(self.filtered_image_figure.figure)
             pdf.savefig(self.binarized_image_figure.figure)
             pdf.savefig(self.result_figure.figure)
-
             pdf.close()
 
     def on_export_to_json_click(self):

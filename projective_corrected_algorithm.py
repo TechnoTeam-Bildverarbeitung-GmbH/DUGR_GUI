@@ -11,6 +11,7 @@ from roi_definitions import RectangularRoi, CircularRoi
 from os.path import exists
 from math import pi, ceil, floor, log, sqrt
 from matplotlib.colors import LogNorm
+from json import load
 
 # Changed "Import Figure Canvas" to import "FigureCanvasQTAgg as Figure Canvas" -> Undo if this raises errors
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas, NavigationToolbar2QT
@@ -280,6 +281,7 @@ class ProjectiveCorrUi(QWidget):
         self.result_figure = FigureCanvas(Figure(figsize=(12, 8), layout='tight'))
         self.export_protocol_button = QPushButton("Export protocol", self)
         self.export_to_json_button = QPushButton("Export to *.json", self)
+        self.load_result_button = QPushButton("Load result data (*.json)", self)
         self.result_tab_layout.addWidget(self.result_figure)
         self.result_tab_layout.addLayout(self.result_tab_layout_h)
         self.result_tab_layout_h.addWidget(self.export_protocol_button)
@@ -287,6 +289,8 @@ class ProjectiveCorrUi(QWidget):
         self.result_tab_layout_h.addWidget(self.export_to_json_button)
         self.export_to_json_button.clicked.connect(self.on_export_to_json_click)
         self.result_tab_layout_h.addStretch()
+        self.result_tab_layout_h.addWidget(self.load_result_button)
+        self.load_result_button.clicked.connect(self.on_load_result_click)
         self.export_protocol_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
         self.export_protocol_shortcut.activated.connect(self.on_export_protocol_click)
 
@@ -340,20 +344,13 @@ class ProjectiveCorrUi(QWidget):
                                                 'types, but the pixel information is not readable. '
                                                 'Make sure the file is not corrupted')
 
-                if self.src_plot is None:
-                    self.src_plot = self._source_ax.imshow(self.source_image,
-                                                           norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                           cmap=custom_colormap.ls_cmap)
-                    self.source_figure.figure.colorbar(self.src_plot, ax=self._source_ax, fraction=0.04, pad=0.035,
-                                                       label="cd/m^2")
-                else:
-                    self.source_figure.figure.clf()
-                    self._source_ax = self.source_figure.figure.subplots()
-                    self.src_plot = self._source_ax.imshow(self.source_image,
-                                                           norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                           cmap=custom_colormap.ls_cmap)
-                    self.source_figure.figure.colorbar(self.src_plot, ax=self._source_ax, fraction=0.04, pad=0.035,
-                                                       label="cd/m^2")
+                self.source_figure.figure.clf()
+                self._source_ax = self.source_figure.figure.subplots()
+                self.src_plot = self._source_ax.imshow(self.source_image,
+                                                       norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                       cmap=custom_colormap.ls_cmap)
+                self.source_figure.figure.colorbar(self.src_plot, ax=self._source_ax, fraction=0.04, pad=0.035,
+                                                   label="cd/m^2")
                 self.source_figure.draw()
                 self.poly = PolygonSelector(ax=self._source_ax, onselect=self.on_poly_select, useblit=True,
                                             props=dict(color='white', linestyle='-', linewidth=2, alpha=0.5))
@@ -364,22 +361,20 @@ class ProjectiveCorrUi(QWidget):
 
             elif image_path[-3:] == "txt":
                 self.source_image = dugr_image_io.convert_ascii_image_to_numpy_array(image_path)
-                self.vmin = np.max(self.source_image) / 10 ** int(self.logarithmic_scaling_flag[-1])
+                try:
+                    self.vmin = np.max(self.source_image) / 10 ** int(self.logarithmic_scaling_flag[-1])
+                except ValueError:
+                    self.status_bar.showMessage('WARNING: The Image you want to load is in one of the supported file '
+                                                'types, but the pixel information is not readable. '
+                                                'Make sure the file is not corrupted')
 
-                if self.src_plot is None:
-                    self.src_plot = self._source_ax.imshow(self.source_image,
-                                                           norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                           cmap=custom_colormap.ls_cmap)
-                    self.source_figure.figure.colorbar(self.src_plot, ax=self._source_ax, fraction=0.04, pad=0.035,
-                                                       label="cd/m^2")
-                else:
-                    self.source_figure.figure.clf()
-                    self._source_ax = self.source_figure.figure.subplots()
-                    self.src_plot = self._source_ax.imshow(self.source_image,
-                                                           norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                           cmap=custom_colormap.ls_cmap)
-                    self.source_figure.figure.colorbar(self.src_plot, ax=self._source_ax, fraction=0.04, pad=0.035,
-                                                       label="cd/m^2")
+                self.source_figure.figure.clf()
+                self._source_ax = self.source_figure.figure.subplots()
+                self.src_plot = self._source_ax.imshow(self.source_image,
+                                                       norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                       cmap=custom_colormap.ls_cmap)
+                self.source_figure.figure.colorbar(self.src_plot, ax=self._source_ax, fraction=0.04, pad=0.035,
+                                                   label="cd/m^2")
                 self.source_figure.draw()
                 self.status_bar.showMessage('File import successful')
         else:
@@ -480,9 +475,13 @@ class ProjectiveCorrUi(QWidget):
         self.status_bar.showMessage("Projective Transformation successful")
 
     def on_use_whole_image_click(self):
-        self.click = [0, 0]
-        self.release = [self.rectified_image.shape[1], self.rectified_image.shape[0]]
-        self.on_safe_roi_click()
+        if self.rectified_image is not None:
+            self.click = [0, 0]
+            self.release = [self.rectified_image.shape[1], self.rectified_image.shape[0]]
+            self.on_safe_roi_click()
+        else:
+            self.status_bar.showMessage("In order to use the whole rectified image, the rectification has to be "
+                                        "executed first")
 
     def on_luminance_threshold_change(self):
         userinput = self.luminance_threshold_line_box.text()
@@ -872,9 +871,9 @@ class ProjectiveCorrUi(QWidget):
             self.status_bar.showMessage("DUGR calculation successful")
 
     def on_export_protocol_click(self):
-        image_file = QFileDialog.getSaveFileName(self, "Export File", "", "*.pdf")[0]
-        if image_file:
-            pdf = PdfPages(image_file)
+        protocol_file = QFileDialog.getSaveFileName(self, "Export File", "", "*.pdf")[0]
+        if protocol_file:
+            pdf = PdfPages(protocol_file)
             pdf.savefig(self.source_figure.figure)
             pdf.savefig(self.rectified_figure.figure)
             pdf.savefig(self.roi_figure.figure)
@@ -888,3 +887,22 @@ class ProjectiveCorrUi(QWidget):
         if json_file:
             self.df.to_json(json_file)
             self.status_bar.showMessage('Export to *.json File successful')
+
+    def on_load_result_click(self):
+        result_path = QFileDialog.getOpenFileName(self, "Choose file")[0]
+        if exists(result_path):
+            if result_path[-4:] != 'json':
+                self.status_bar.showMessage('Parameter file type is invalid.\nMake sure to load a *.json File')
+            else:
+                with open(result_path) as f:
+                    data = load(f)
+        table_data = []
+        for i in data['Parameter']:
+            table_data.append([data['Parameter'][i], data['Value'][i]])
+        self.result_figure.figure.clf()
+        self._result_ax = self.result_figure.figure.subplots()
+        self._result_ax.axis('off')
+        self.result_table = self._result_ax.table(cellText=table_data, loc='center', cellLoc='center')
+        self.result_table.set_fontsize(13)
+        self.result_table.scale(1, 2)
+        self.result_figure.draw()
