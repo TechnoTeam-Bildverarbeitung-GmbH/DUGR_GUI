@@ -1,0 +1,87 @@
+v_0.1 --> v_0.2
+
+New Functions:
+
+- Check of the required resolution (1.2[mm/px]) based on input dimensions and the image
+- Possibility to draw circular ROIs on the rectified image to calculate DUGR of luminaires which are not Rectangular
+(--> Polygonal ROIs are going to be available in one of the next versions )
+
+--------------------------------------------------------------
+
+v_0.2 --> v_0.3
+
+New Functions:
+-	Possibility to load an image from a *.txt file
+The number of rows is estimated by counting the number of line breaks
+The number of columns is then estimated by dividing the number of total values with the number of rows
+
+--------------------------------------------------------------
+
+v_0.3 --> v_0.4
+
+Fairly big update.
+
+- The GUI has now 2 Different procedures implemented that can be changed via checkbox
+	(Calculating DUGR on projective distorted and on projective corrected image)
+- The Matplotlib frontend has been polished and the matplotlib toolbar was added to all of the figures
+- A possibility to save the measurement protocol to a *.pdf file has been implemented 
+
+--------------------------------------------------------------
+
+v_0.4 --> v_0.5
+
+New Functions:
+
+- Possibility to load a parameter set from a *.json file for the projective distorted algorithm.
+- Calculation of the DUGR value has been corrected
+- In order to execute the calculation the ROI of the whole luminaire has to be drawn onto the src image
+  (Only trapezoid ROIs are available, rectangular and circular postponed to the next update)
+
+Bugfixes:
+-	Fixed a bug where the polygon Selector didn´t reset properly
+-	Fixed a bug where the result table was overwritten with multiple entries instead of updated correctly
+
+----------------------------------------------------------------
+
+v_0.5 --> v_0.6
+
+DOCUMENTATION NOT DONE YET!
+
+----------------------------------------------------------------
+
+v_0.6 --> v_0.7
+
+- Option to only filter inside a rectangular window around the specified luminous area for the algorithm without projective correction
+- Performance in terms of execution time improved
+	--> Execution time of calculation with filtering of a whole image with high resolution (4087x1996px) down to approx 1 minute
+	    (Was around 6-7 Minutes before for images of such high resolution)
+
+Bugfixes:
+-	Fixed a bug where a trapezoid region with a bigger width at the top than the bottom side would crash the GUI
+-	Fixed a bug where the ellipsoid region selector was not selectable for the algorithm with projective correction
+-	Fixed a bug where loading a new source image did not reset the old axis and resulted in stretching the image
+
+
+-----------------------------------------------------------------
+
+v_0.7 --> v_1.0
+
+- The colormap for luminance images has been changed to one similar to the one which is used by the LabSoft Software from TechnoTeam
+- It is now possible to change between logarithmic scalings for the colormap.
+	--> This allows contrast enhancement in order to draw borders onto the image.
+
+- A lot of Bugfixes regarding different procedures of the program.
+Deviation from the sequence often led to crashes of the software before.
+This behavior is now intercepted and a hint is given in the status bar.
+
+-----------------------------------------------------------------
+
+v_1.0 --> v_1.2.2
+
+- Changed the Python script architecture
+	-> Script splitted into seperate Python Files to allow easier debugging
+
+- Ability to safe Parameters from the GUI to a *.json File
+- Ability to load Result *.json Files into the Result Tab
+- Small Bugfixes and stability changes
+- Created an Installer for the GUI
