@@ -12,3 +12,6 @@ valentin.siebenkees@technoteam.de
 you can either download the Code here from Github or grab the version you like from the following cloud link (installer included for newer versions):
 
 https://cloud.tu-ilmenau.de/s/PyG785oapRqCNCM
+
+## Documentation
+The folder doc contains further documentation regarding the usage of the GUI and a description of the calculation steps
