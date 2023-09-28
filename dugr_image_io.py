@@ -60,7 +60,7 @@ def convert_tt_image_to_numpy_array(image_file: str):
         # Color Image
         elif header_dict['Typ'] == "Pic98::TPlane<Pic98::TRGBFloatPixel>":
             image_array = np.frombuffer(pixel_data, dtype=np.float32).reshape((int(header_dict['Lines']),
-                                                                               int(header_dict['Columns'])), 3)
+                                                                               int(header_dict['Columns']), 3))
     except KeyError:
         print("The file type is one of the expected TechnoTeam formats (*.pus, *.pf. *.pcf)"
               "\nBut the header seems to be corrupted"
