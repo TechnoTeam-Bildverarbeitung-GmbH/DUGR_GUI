@@ -823,6 +823,8 @@ class ProjectiveCorrUi(QWidget):
 
             if self.check_box_use_luminous_area.isChecked():
                 self.A = self.luminous_area_width * self.luminous_area_height
+                self.rectification_width = self.luminous_area_width
+                self.rectification_height = self.luminous_area_height
 
             self.k_square = round(((self.Leff ** 2 * self.Aeff) / (self.Ls ** 2 * self.A)), 4)
 
@@ -843,8 +845,8 @@ class ProjectiveCorrUi(QWidget):
                 ["Filter width", str(self.filter_width) + " [mm]"],
                 ["Filter sigma", str(self.sigma) + " [mm]"],
                 ["Border size", str(self.border_size) + " [mm]"],
-                ["luminaire width", str(self.rectification_width) + " [mm]"],
-                ["luminaire height", str(self.rectification_height) + " [mm]"],
+                ["luminous area width", str(self.rectification_width) + " [mm]"],
+                ["luminous area height", str(self.rectification_height) + " [mm]"],
             ]
 
             data = {'Parameter': ['DUGR', 'A_new', 'k^2', 'A_eff', 'L_eff', 'A', 'L_s', 'lum_th', 'FWHM',

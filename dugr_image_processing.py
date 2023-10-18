@@ -286,22 +286,16 @@ def execute_projective_dist_algorithm(src_image: np.ndarray, viewing_distance: f
 
     ro_min = degrees(atan(d/rb_min))/10
 
-    #  Calculate Theta and Phi Image
-    theta, phi = cart2theta_phi(focal_length=focal_length, pixel_size=pixel_size, image=src_image, opt_x=opt_x,
-                                opt_y=opt_y)
-
-    # y_5deg, x_5deg = np.nonzero(theta <= 5)
-    # r_h = (max(y_5deg) - min(y_5deg))/2
-    # r_v = (max(x_5deg) - min(x_5deg))/2
-    # r_mean = (r_v + r_h)/2
-    # r_o_image = 5.0/r_mean
-
     r_5deg = (tan(radians(5.0)) * focal_length)/pixel_size
     r_o = 5.0 / r_5deg
 
     fwhm = ro_min/r_o
     sigma = fwhm / 2.3584
     filter_width = 2 * ceil(3 * sigma) + 1
+
+    #  Calculate Theta and Phi Image
+    theta, phi = cart2theta_phi(focal_length=focal_length, pixel_size=pixel_size, image=src_image, opt_x=opt_x,
+                                opt_y=opt_y)
 
     #  Convert Theta to radians
     theta_rad = np.radians(theta)
