@@ -3,7 +3,6 @@ MAIN SCRIPT of the GUI
 
 Defines the main window and calls the different algorithm files
 """
-from pkg_resources import require
 from projective_distorted_algorithm import ProjectiveDistUi
 from projective_corrected_algorithm import ProjectiveCorrUi
 from sys import argv, exit
@@ -43,7 +42,6 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == '__main__':
-    version = require()
     app = QApplication(argv)
     app.setStyle('Fusion')
     window = MainWindow()
