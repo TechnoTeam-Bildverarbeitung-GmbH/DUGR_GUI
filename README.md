@@ -3,7 +3,7 @@ This project is an open source project, which aims to realize the advanced glare
 It was created based on the CIE232:2019 and can be used to test limitations of the procedure and to gain new insights and knowledge from practical measurements.
 
 If you have any questions or proposals, feel free to use the discussion platform of this repository:
-https://github.com/valentin7kees/DUGR_GUI/discussions
+https://github.com/Valentin-Siebenkees/DUGR_GUI/discussions
 
 or write an E-Mail to me:
 valentin.siebenkees@technoteam.de
@@ -13,7 +13,7 @@ you can either download the Code here from Github or grab the version you like f
 
 https://cloud.tu-ilmenau.de/s/PyG785oapRqCNCM
 
-(Current version: v_1.2.3)
+(Current version: v_1.2.4)
 
 ## Documentation
 The folder doc contains further documentation regarding the usage of the GUI and a description of the calculation steps
