@@ -12,6 +12,7 @@ from os.path import exists
 from math import pi, ceil, floor, log, sqrt
 from matplotlib.colors import LogNorm
 from json import load
+from csv import reader
 
 # Changed "Import Figure Canvas" to import "FigureCanvasQTAgg as Figure Canvas" -> Undo if this raises errors
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas, NavigationToolbar2QT
@@ -280,17 +281,23 @@ class ProjectiveCorrUi(QWidget):
         self.result_tab.setLayout(self.result_tab_layout)
         self.result_figure = FigureCanvas(Figure(figsize=(12, 8), layout='tight'))
         self.export_protocol_button = QPushButton("Export protocol", self)
-        self.export_to_json_button = QPushButton("Export to *.json", self)
-        self.load_result_button = QPushButton("Load result data (*.json)", self)
+        self.export_to_json_button = QPushButton("Export result to *.json", self)
+        self.export_to_csv_button = QPushButton("Export result to *.csv")
+        self.load_json_result_button = QPushButton("Load result data (*.json)", self)
+        self.load_csv_result_button = QPushButton("Load result data (*.csv)", self)
         self.result_tab_layout.addWidget(self.result_figure)
         self.result_tab_layout.addLayout(self.result_tab_layout_h)
         self.result_tab_layout_h.addWidget(self.export_protocol_button)
         self.export_protocol_button.clicked.connect(self.on_export_protocol_click)
         self.result_tab_layout_h.addWidget(self.export_to_json_button)
         self.export_to_json_button.clicked.connect(self.on_export_to_json_click)
+        self.result_tab_layout_h.addWidget(self.export_to_csv_button)
+        self.export_to_csv_button.clicked.connect(self.on_export_to_csv_click)
         self.result_tab_layout_h.addStretch()
-        self.result_tab_layout_h.addWidget(self.load_result_button)
-        self.load_result_button.clicked.connect(self.on_load_result_click)
+        self.result_tab_layout_h.addWidget(self.load_json_result_button)
+        self.load_json_result_button.clicked.connect(self.on_load_json_result_click)
+        self.result_tab_layout_h.addWidget(self.load_csv_result_button)
+        self.load_csv_result_button.clicked.connect(self.on_load_csv_result_click)
         self.export_protocol_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
         self.export_protocol_shortcut.activated.connect(self.on_export_protocol_click)
 
@@ -839,7 +846,7 @@ class ProjectiveCorrUi(QWidget):
                 ["A_eff", str(self.Aeff) + " [mm^2]"],
                 ["L_eff", str(self.Leff) + " [cd/m^2]"],
                 ["A", str(self.A) + " [mm^2]"],
-                ["L_s", str(self.Ls) + " [cd/m^2]"],
+                ["Mean Luminaire luminance", str(self.Ls) + " [cd/m^2]"],
                 ["lum_th", str(self.lum_th) + " [cd/m^2]"],
                 ["FWHM", str(self.FWHM) + " [mm]"],
                 ["Filter width", str(self.filter_width) + " [mm]"],
@@ -890,17 +897,45 @@ class ProjectiveCorrUi(QWidget):
             self.df.to_json(json_file)
             self.status_bar.showMessage('Export to *.json File successful')
 
-    def on_load_result_click(self):
+    def on_export_to_csv_click(self):
+        csv_file = QFileDialog.getSaveFileName(self, "Export File", "", "*.csv")[0]
+        if csv_file:
+            self.df.to_csv(csv_file, encoding='utf-8-sig')
+            self.status_bar.showMessage('Export to *.csv File successful')
+
+    def on_load_json_result_click(self):
         result_path = QFileDialog.getOpenFileName(self, "Choose file")[0]
         if exists(result_path):
             if result_path[-4:] != 'json':
                 self.status_bar.showMessage('Parameter file type is invalid.\nMake sure to load a *.json File')
+                return
             else:
-                with open(result_path) as f:
+                with open(result_path, encoding='utf-8-sig') as f:
                     data = load(f)
         table_data = []
         for i in data['Parameter']:
             table_data.append([data['Parameter'][i], data['Value'][i]])
+        self.result_figure.figure.clf()
+        self._result_ax = self.result_figure.figure.subplots()
+        self._result_ax.axis('off')
+        self.result_table = self._result_ax.table(cellText=table_data, loc='center', cellLoc='center')
+        self.result_table.set_fontsize(13)
+        self.result_table.scale(1, 2)
+        self.result_figure.draw()
+
+    def on_load_csv_result_click(self):
+        result_path = QFileDialog.getOpenFileName(self, "Choose file")[0]
+        if exists(result_path):
+            if result_path[-3:] != 'csv':
+                self.status_bar.showMessage('Parameter file type is invalid.\nMake sure to load a *.csv File')
+                return
+            else:
+                table_data = []
+                with open(result_path) as f:
+                    csv_reader = reader(f)
+                    for index, row in enumerate(csv_reader):
+                        if index >= 1:
+                            table_data.append(row[1:-1])
         self.result_figure.figure.clf()
         self._result_ax = self.result_figure.figure.subplots()
         self._result_ax.axis('off')
