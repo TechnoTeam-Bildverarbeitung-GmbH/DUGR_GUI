@@ -3,6 +3,7 @@ MAIN SCRIPT of the GUI
 
 Defines the main window and calls the different algorithm files
 """
+from pkg_resources import require
 from projective_distorted_algorithm import ProjectiveDistUi
 from projective_corrected_algorithm import ProjectiveCorrUi
 from sys import argv, exit
@@ -22,7 +23,7 @@ class MainWindow(QMainWindow):
         self.resize(1400, 900)
         self.start_projective_distorted_ui()
 
-        self.setWindowTitle("DUGR GUI")
+        self.setWindowTitle("DUGR GUI 1.2.4")
         self.setWindowIcon(QIcon(join(basedir, "assets/light-bulb.ico")))
 
         self.projective_dist_tab = None
@@ -42,8 +43,8 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == '__main__':
+    version = require()
     app = QApplication(argv)
     app.setStyle('Fusion')
-
     window = MainWindow()
     exit(app.exec())
