@@ -5,7 +5,7 @@ It was created based on the CIE232:2019 and can be used to test limitations of t
 If you have any questions or proposals, feel free to use the discussion platform of this repository:
 https://github.com/TechnoTeam-Bildverarbeitung-GmbH/DUGR_GUI/discussions
 
-or write an E-Mail to me:
+or write an E-Mail to:
 valentin.siebenkees@technoteam.de
 
 ## Installation:
