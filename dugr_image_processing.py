@@ -11,6 +11,8 @@ Functions to handle image processing steps of the DUGR calculation
 - Function to check where a point lies in relation to a line
 - Function that executes the calculation of the DUGR value on projective distorted images
 """
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 import numpy as np
 from cv2 import getPerspectiveTransform, warpPerspective, filter2D
 from scipy.ndimage import correlate
@@ -345,6 +347,7 @@ def execute_projective_dist_algorithm(src_image: np.ndarray, viewing_distance: f
     filtered_img = []
     if not filter_flag:
         filtered_img.append(filter_image(src_image, filter_width, sigma))
+
     elif filter_flag:
         for i in range(len(rois)):
             if type(rois[i]).__name__ == 'TrapezoidRoi':
@@ -376,22 +379,10 @@ def execute_projective_dist_algorithm(src_image: np.ndarray, viewing_distance: f
             for j in range(filtered_image_roi.shape[1]):
                 if filtered_image_roi[i][j] >= 500:
                     binarized_img_roi[i][j] = filtered_image_roi[i][j]
-                    if filter_flag:
-                        eff_solid_angle_values.append(omega[i + int(rois[count].top_left[1] - ceil(filter_width / 2))]
-                                                      [j + int(rois[count].top_left[0] - ceil(filter_width / 2))])
-                    else:
+                    if not filter_flag:
                         eff_solid_angle_values.append(omega[i][j])
 
         binarized_img.append(binarized_img_roi)
-
-    #  Calculate the effective solid angel by calculating the sum of the pixel solid angles over the luminance threshold
-    omega_eff = np.sum(np.array(eff_solid_angle_values))
-
-    # Calculate the effective luminance by calculating the sum of the luminance values over the threshold
-    l_eff = []
-    for binarized_img_roi in binarized_img:
-        l_eff.append(binarized_img_roi[binarized_img_roi != 0].mean())
-    l_eff = np.array(l_eff).mean()
 
     # Calculate the mean luminance l_s of the whole luminaire
     # Calculate the solid angle omega_l of the whole luminaire
@@ -402,47 +393,91 @@ def execute_projective_dist_algorithm(src_image: np.ndarray, viewing_distance: f
     for i in range(len(rois)):
 
         if type(rois[i]).__name__ == 'TrapezoidRoi':
-            # Check whether a point is inside the trapezoid:
-            # https://math.stackexchange.com/questions/757591/how-to-determine-the-side-on-which-a-point-lies
             y_start = min(rois[i].roi_vertices[:, 1])
             y_end = max(rois[i].roi_vertices[:, 1])
             x_start = min(rois[i].roi_vertices[:, 0])
             x_end = max(rois[i].roi_vertices[:, 0])
 
-            for y in range(int(y_start), int(y_end+1)):
-                for x in range(int(x_start), int(x_end+1)):
-                    if (check_point(x, y, rois[i].top_left[0], rois[i].bottom_left[0], rois[i].top_left[1],
-                                    rois[i].bottom_left[1]) <= 0) and (check_point(x, y, rois[i].top_right[0],
+            y_array = np.arrange(y_start, y_end, 1)
+            x_array = np.arrange(x_start, x_end, 1)
+
+            # Check whether a point is inside the trapezoid:
+            # https://math.stackexchange.com/questions/757591/how-to-determine-the-side-on-which-a-point-lies
+            for y_roi, y_src in enumerate(y_array):
+                for x_roi, x_src in enumerate(x_array):
+                    if (check_point(x_roi, y_roi, rois[i].top_left[0], rois[i].bottom_left[0], rois[i].top_left[1],
+                                    rois[i].bottom_left[1]) <= 0) and (check_point(x_roi, y_roi, rois[i].top_right[0],
                                                                                    rois[i].bottom_right[0],
                                                                                    rois[i].top_right[1],
                                                                                    rois[i].bottom_right[1]) >= 0):
-                        l_values.append(src_image[y][x])
-                        omega_values.append(omega[y][x])
+                        l_values.append(src_image[y_src][x_src])
+                        omega_values.append(omega[y_src][x_src])
+
+                        if filter_flag and binarized_img[i][y_roi][x_roi] != 0:
+                            eff_solid_angle_values.append(omega[y_src][x_src])
+
+                    else:
+                        if binarized_img[i][y_roi][x_roi] != 0:
+                            binarized_img[i][y_roi][x_roi] = 0
 
         elif type(rois[i]).__name__ == 'CircularRoi':
             h = rois[i].middle_point_coordinates[0]
             k = rois[i].middle_point_coordinates[1]
             r_x = rois[i].width/2
             r_y = rois[i].height/2
+            y_min = min(rois[i].bounding_box_coordinates[:, 1])
+            y_max = max(rois[i].bounding_box_coordinates[:, 1])
+
+            x_min = min(rois[i].bounding_box_coordinates[:, 0])
+            x_max = max(rois[i].bounding_box_coordinates[:, 0])
+
+            y_array = np.arange(start=y_min - ceil(filter_width / 2), stop=y_max + ceil(filter_width / 2), step=1)
+            x_array = np.arange(start=x_min - ceil(filter_width / 2), stop=x_max + ceil(filter_width / 2), step=1)
+
             # Check whether a point is part of the Ellipsoid:
             # https://math.stackexchange.com/questions/76457/check-if-a-point-is-within-an-ellipse
-            for y in range(min(rois[i].bounding_box_coordinates[:, 1])-1,
-                           max(rois[i].bounding_box_coordinates[:, 1])+1):
-                for x in range(min(rois[i].bounding_box_coordinates[:, 0])-1,
-                               max(rois[i].bounding_box_coordinates[:, 0])+1):
-                    if ((x - h)**2)/(r_x**2) + ((y - k)**2)/(r_y**2) <= 1:
-                        l_values.append(src_image[y][x])
-                        omega_values.append(omega[y][x])
+            for y_roi, y_src in enumerate(y_array):
+                for x_roi, x_src in enumerate(x_array):
+                    if ((x_src - h)**2)/(r_x**2) + ((y_src - k)**2)/(r_y**2) <= 1:
+                        l_values.append(src_image[y_src][x_src])
+                        omega_values.append(omega[y_src][x_src])
+
+                        if filter_flag and binarized_img[i][y_roi][x_roi] != 0:
+                            eff_solid_angle_values.append(omega[y_src][x_src])
+
+                    else:
+                        if binarized_img[i][y_roi][x_roi] != 0:
+                            binarized_img[i][y_roi][x_roi] = 0
 
         elif type(rois[i]).__name__ == 'RectangularRoi':
-            for y in range(min(rois[i].roi_coordinates[:, 1]), max(rois[i].roi_coordinates[:, 1])):
-                for x in range(min(rois[i].roi_coordinates[:, 0]),
-                               max(rois[i].roi_coordinates[:, 0])):
-                    l_values.append(src_image[y][x])
-                    omega_values.append(omega[y][x])
+            y_min = min(rois[i].roi_coordinates[:, 1])
+            y_max = max(rois[i].roi_coordinates[:, 1])
+            x_min = min(rois[i].roi_coordinates[:, 0])
+            x_max = max(rois[i].roi_coordinates[:, 0])
+
+            y_array = np.arange(start=y_min - ceil(filter_width / 2), stop=y_max + ceil(filter_width / 2), step=1)
+            x_array = np.arange(start=x_min - ceil(filter_width / 2), stop=x_max + ceil(filter_width / 2), step=1)
+
+            for y_roi, y_src in enumerate(y_array):
+                for x_roi, x_src in enumerate(x_array):
+                    l_values.append(src_image[y_src][x_src])
+                    omega_values.append(omega[y_src][x_src])
+
+                    if filter_flag and binarized_img[i][y_roi][x_roi] != 0:
+                        eff_solid_angle_values.append(omega[y_src][x_src])
 
     l_s = np.array(l_values).mean()
     omega_l = np.array(omega_values).sum()
+
+    #  Calculate the effective solid angel by calculating the sum of the pixel solid angles over the luminance threshold
+    omega_eff = np.sum(np.array(eff_solid_angle_values))
+
+    # Calculate the effective luminance by calculating the sum of the luminance values over the threshold
+    l_eff = []
+    for binarized_img_roi in binarized_img:
+        l_eff.append(binarized_img_roi[binarized_img_roi != 0].mean())
+    l_eff = np.array(l_eff).mean()
+
     k_square = (l_eff**2 * omega_eff)/(l_s**2 * omega_l)
 
     # Calculate the DUGR value

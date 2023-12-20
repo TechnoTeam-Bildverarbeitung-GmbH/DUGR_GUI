@@ -22,7 +22,7 @@ class MainWindow(QMainWindow):
         self.resize(1400, 900)
         self.start_projective_distorted_ui()
 
-        self.setWindowTitle("DUGR GUI 1.2.4")
+        self.setWindowTitle("DUGR GUI 1.3.0")
         self.setWindowIcon(QIcon(join(basedir, "assets/light-bulb.ico")))
 
         self.projective_dist_tab = None

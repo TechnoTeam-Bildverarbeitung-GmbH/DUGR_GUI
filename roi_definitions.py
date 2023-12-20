@@ -44,14 +44,20 @@ class CircularRoi:
         shifted_middle_point_x = self.middle_point_coordinates[0] - self.bounding_box_coordinates[0][0]
         shifted_middle_point_y = self.middle_point_coordinates[1] - self.bounding_box_coordinates[0][1]
 
-        luminance_values = []
+        # luminance_values = []
+        # for y in range(self.bounding_box.shape[0]):
+        #     for x in range(bounding_box.shape[1]):
+        #         if (((x - shifted_middle_point_x) ** 2) / ((self.width / 2) ** 2) + (
+        #                 (y - shifted_middle_point_y) ** 2) / (self.height / 2) ** 2) <= 1:
+        #             luminance_values.append(bounding_box[y][x])
+
+        self.luminance_values = np.zeros(self.bounding_box.shape)
         for y in range(self.bounding_box.shape[0]):
             for x in range(bounding_box.shape[1]):
                 if (((x - shifted_middle_point_x) ** 2) / ((self.width / 2) ** 2) + (
                         (y - shifted_middle_point_y) ** 2) / (self.height / 2) ** 2) <= 1:
-                    luminance_values.append(bounding_box[y][x])
+                    self.luminance_values[y][x] = self.bounding_box[y][x]
 
-        self.luminance_values = np.array(luminance_values)
         self.mean_luminance = np.mean(self.luminance_values)
 
 
