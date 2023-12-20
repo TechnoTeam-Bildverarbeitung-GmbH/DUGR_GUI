@@ -85,3 +85,20 @@ v_1.0 --> v_1.2.2
 - Ability to load Result *.json Files into the Result Tab
 - Small Bugfixes and stability changes
 - Created an Installer for the GUI
+
+-----------------------------------------------------------------
+
+v_1.2.2 --> v_1.2.3
+
+- Added *.csv handling for saving and loading the result tab
+
+-----------------------------------------------------------------
+
+v_1.2.3 --> v_1.3.0
+
+- Changed Parameter Layout
+- Added Camera Presets (Pixel Size)
+- Updated Pixel selection for Ellipsoid ROIs
+- Updated Area Calculation for Ellipsoid / Round Luminaires
+- Bugfixing for pixel mapping
+
