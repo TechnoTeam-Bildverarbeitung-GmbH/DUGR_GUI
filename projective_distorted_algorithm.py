@@ -10,7 +10,7 @@ import custom_colormap
 
 from roi_definitions import RectangularRoi, CircularRoi, TrapezoidRoi
 from os.path import exists
-from math import pi, log
+from math import pi, log, ceil
 from matplotlib.colors import LogNorm
 from json import load, dump
 from csv import reader
@@ -46,11 +46,29 @@ class ProjectiveDistUi(QWidget):
         layout.addLayout(layout2)
         layout.addLayout(layout3)
 
+        self.pixel_size_dict = {
+            'LMK6': 0.00345,
+            'LMK5-5': 0.00345,
+            'LMK5-1': 0.00645,
+            'LMK98-4': 0.00645,
+            'Canon EOS 70d': 0.00409*2,
+            'Canon EOS 80d': 0.00373*2,
+            'Canon EOS 350d': 0.00641*2,
+            'Canon EOS 450d': 0.00519*2,
+            'Canon EOS 550d': 0.00429*2,
+            'Canon EOS 650d': 0.00429*2,
+            'Canon EOS RP': 0.00573*2,
+            'Custom Pixel Size': 0.0
+        }
+        self.camera_list = ['LMK6', 'LMK5-5', 'LMK5-1', 'LMK98-4', 'Canon EOS 70d', 'Canon EOS 80d', 'Canon EOS 350d',
+                            'Canon EOS 450d', 'Canon EOS 550d', 'Canon EOS 650d', 'Canon EOS RP', 'Custom Pixel Size']
+        self.lmk_mobile = False
+
         # Parameters
         self.lum_th = 500
         self.d = 12
         self.focal_length = 0.0
-        self.pixel_size = 0.0
+        self.pixel_size = self.pixel_size_dict["LMK6"]
         self.viewing_angle = 0.0
         self.viewing_distance = 0.0
         self.optical_resolution = 0.0
@@ -92,7 +110,7 @@ class ProjectiveDistUi(QWidget):
 
         self.rois = []
         self.roi_shape_flag = "Trapezoid"
-        self.filter_only_roi_flag = False
+        self.filter_only_roi_flag = True
 
         self.source_image = None
         self.src_plot = None
@@ -148,15 +166,20 @@ class ProjectiveDistUi(QWidget):
         # Checkbox to filter only ROI around
         self.checkbox_filter_only_roi = QCheckBox("Filter only ROI")
         layout2.addWidget(self.checkbox_filter_only_roi)
+        self.checkbox_filter_only_roi.setChecked(True)
         self.checkbox_filter_only_roi.stateChanged.connect(self.on_filter_only_roi_change)
 
-        # Luminance Threshold Label + Line Box
-        luminance_threshold_label = QLabel("Luminance Threshold [cd/m^2]")
-        layout2.addWidget(luminance_threshold_label)
-        self.luminance_threshold_line_box = QLineEdit()
-        layout2.addWidget(self.luminance_threshold_line_box)
-        self.luminance_threshold_line_box.setText(str(self.lum_th))
-        self.luminance_threshold_line_box.textChanged.connect(self.on_luminance_threshold_change)
+        # Pixel Size Label + Dropdown + Line Box
+        pixel_size_label = QLabel("Pixel Size [mm]")
+        layout2.addWidget(pixel_size_label)
+        self.pixel_size_drop_down = QComboBox()
+        self.pixel_size_drop_down.addItems(self.camera_list)
+        self.pixel_size_drop_down.activated.connect(self.on_pixel_size_dropdown_change)
+        layout2.addWidget(self.pixel_size_drop_down)
+        self.pixel_size_line_box = QLineEdit()
+        layout2.addWidget(self.pixel_size_line_box)
+        self.pixel_size_line_box.setText(str(self.pixel_size))
+        self.pixel_size_line_box.textChanged.connect(self.on_pixel_size_change)
 
         # Focal Length Label + Line Box
         focal_length_label = QLabel("Focal Length [mm]")
@@ -165,22 +188,6 @@ class ProjectiveDistUi(QWidget):
         layout2.addWidget(self.focal_length_line_box)
         self.focal_length_line_box.setText(str(self.focal_length))
         self.focal_length_line_box.textChanged.connect(self.on_focal_length_change)
-
-        # Pixel Size Label + Line Box
-        pixel_size_label = QLabel("Pixel Size [mm]")
-        layout2.addWidget(pixel_size_label)
-        self.pixel_size_line_box = QLineEdit()
-        layout2.addWidget(self.pixel_size_line_box)
-        self.pixel_size_line_box.setText(str(self.pixel_size))
-        self.pixel_size_line_box.textChanged.connect(self.on_pixel_size_change)
-
-        # Worst case resolution d Label + Line Box
-        d_label = QLabel('"Eye Resolution: d [mm]"')
-        layout2.addWidget(d_label)
-        self.d_line_box = QLineEdit()
-        layout2.addWidget(self.d_line_box)
-        self.d_line_box.setText(str(self.d))
-        self.d_line_box.textChanged.connect(self.on_worst_case_resolution_change)
 
         # Viewing angle Label + Line Box
         viewing_angle_label = QLabel("Measurement angle \u03B1E [°]")
@@ -198,14 +205,6 @@ class ProjectiveDistUi(QWidget):
         self.viewing_distance_line_box.setText(str(self.viewing_distance))
         self.viewing_distance_line_box.textChanged.connect(self.on_viewing_distance_change)
 
-        # Luminous Intensity Label + Line Box
-        luminous_intensity_label = QLabel("Luminous Intensity I [cd]")
-        layout2.addWidget(luminous_intensity_label)
-        self.luminous_intensity_line_box = QLineEdit()
-        layout2.addWidget(self.luminous_intensity_line_box)
-        self.luminous_intensity_line_box.setText(str(self.luminous_intensity))
-        self.luminous_intensity_line_box.textChanged.connect(self.on_luminous_intensity_change)
-
         # Luminaire width Label + Line Box
         luminaire_width_label = QLabel("Luminous area width [mm]")
         layout2.addWidget(luminaire_width_label)
@@ -221,6 +220,30 @@ class ProjectiveDistUi(QWidget):
         layout2.addWidget(self.luminaire_height_line_box)
         self.luminaire_height_line_box.setText(str(self.luminaire_height))
         self.luminaire_height_line_box.textChanged.connect(self.on_luminaire_height_change)
+
+        # Luminance Threshold Label + Line Box
+        luminance_threshold_label = QLabel("Luminance Threshold [cd/m^2]")
+        layout2.addWidget(luminance_threshold_label)
+        self.luminance_threshold_line_box = QLineEdit()
+        layout2.addWidget(self.luminance_threshold_line_box)
+        self.luminance_threshold_line_box.setText(str(self.lum_th))
+        self.luminance_threshold_line_box.textChanged.connect(self.on_luminance_threshold_change)
+
+        # Worst case resolution d Label + Line Box
+        d_label = QLabel('"Eye Resolution: d [mm]"')
+        layout2.addWidget(d_label)
+        self.d_line_box = QLineEdit()
+        layout2.addWidget(self.d_line_box)
+        self.d_line_box.setText(str(self.d))
+        self.d_line_box.textChanged.connect(self.on_worst_case_resolution_change)
+
+        # Luminous Intensity Label + Line Box
+        luminous_intensity_label = QLabel("Luminous Intensity I [cd]\n(Optional Parameter)")
+        layout2.addWidget(luminous_intensity_label)
+        self.luminous_intensity_line_box = QLineEdit()
+        layout2.addWidget(self.luminous_intensity_line_box)
+        self.luminous_intensity_line_box.setText(str(self.luminous_intensity))
+        self.luminous_intensity_line_box.textChanged.connect(self.on_luminous_intensity_change)
 
         layout2.addStretch()
 
@@ -510,6 +533,7 @@ class ProjectiveDistUi(QWidget):
 
             elif isinstance(self.rois[0], CircularRoi):
                 self._roi_axs = self.roi_figure.figure.subplots()
+
                 roi_plot = self._roi_axs.imshow(self.rois[0].bounding_box,
                                                 norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
                                                 cmap=custom_colormap.ls_cmap)
@@ -517,8 +541,8 @@ class ProjectiveDistUi(QWidget):
                                                 label="cd/m^2")
 
                 t = np.linspace(0, 2 * pi, 100)
-                self._roi_axs.plot(self.rois[0].width / 2 + (self.rois[0].width - 1) / 2 * np.cos(t),
-                                   self.rois[0].height / 2 + (self.rois[0].height - 1) / 2 * np.sin(t),
+                self._roi_axs.plot(self.rois[0].width / 2 - 0.5 + self.rois[0].width / 2 * np.cos(t),
+                                   self.rois[0].height / 2 - 0.5 + self.rois[0].height / 2 * np.sin(t),
                                    color='red')
 
             elif isinstance(self.rois[0], TrapezoidRoi):
@@ -556,9 +580,9 @@ class ProjectiveDistUi(QWidget):
                                                     label="cd/m^2")
 
                     t = np.linspace(0, 2 * pi, 100)
-                    self._roi_axs[i].plot(self.rois[i].width / 2 + (self.rois[i].width - 1) / 2 * np.cos(t),
-                                          self.rois[i].height / 2 + (self.rois[i].height - 1) / 2 * np.sin(t),
-                                          color='red')
+                    self._roi_axs[i].plot(self.rois[i].width / 2 - 0.5 + self.rois[i].width / 2 * np.cos(t),
+                                       self.rois[i].height / 2 - 0.5 + self.rois[i].height / 2 * np.sin(t),
+                                       color='red')
 
                 elif isinstance(self.rois[i], TrapezoidRoi):
                     roi_plot = self._roi_axs[i].imshow(self.rois[i].bounding_box,
@@ -595,8 +619,8 @@ class ProjectiveDistUi(QWidget):
                                                     label="cd/m^2")
 
                     t = np.linspace(0, 2 * pi, 100)
-                    self._roi_axs.plot(self.rois[0].width / 2 + (self.rois[0].width - 1) / 2 * np.cos(t),
-                                       self.rois[0].height / 2 + (self.rois[0].height - 1) / 2 * np.sin(t),
+                    self._roi_axs.plot(self.rois[0].width / 2 - 0.5 + self.rois[0].width / 2 * np.cos(t),
+                                       self.rois[0].height / 2 - 0.5 + self.rois[0].height / 2 * np.sin(t),
                                        color='red')
 
                 elif isinstance(self.rois[0], TrapezoidRoi):
@@ -624,8 +648,8 @@ class ProjectiveDistUi(QWidget):
                                                         label="cd/m^2")
 
                         t = np.linspace(0, 2 * pi, 100)
-                        self._roi_axs[i].plot(self.rois[i].width / 2 + (self.rois[i].width - 1) / 2 * np.cos(t),
-                                              self.rois[i].height / 2 + (self.rois[i].height - 1) / 2 * np.sin(t),
+                        self._roi_axs[i].plot(self.rois[i].width / 2 - 0.5 + self.rois[i].width / 2 * np.cos(t),
+                                              self.rois[i].height / 2 - 0.5 + self.rois[i].height / 2 * np.sin(t),
                                               color='red')
                     elif isinstance(self.rois[i], TrapezoidRoi):
                         roi_plot = self._roi_axs[i].imshow(self.rois[i].bounding_box,
@@ -661,6 +685,10 @@ class ProjectiveDistUi(QWidget):
             self.status_bar.showMessage("Pixel Size changed successfully")
         except ValueError:
             self.status_bar.showMessage("Userinput to float conversion not possible")
+
+    def on_pixel_size_dropdown_change(self, index):
+        self.pixel_size_line_box.setText(str(self.pixel_size_dict[self.camera_list[index]]))
+        self.pixel_size = self.pixel_size_dict[self.camera_list[index]]
 
     def on_worst_case_resolution_change(self):
         userinput = self.d_line_box.text()
@@ -729,16 +757,17 @@ class ProjectiveDistUi(QWidget):
 
         self.A_eff = self.solid_angle_eff * self.viewing_distance**2
         if self.roi_shape_flag != "Circular":
-            self.A_p = (self.luminaire_height * self.luminaire_width) * np.cos(np.radians(90 - self.viewing_angle))
+            self.A = self.luminaire_width * self.luminaire_height
+            self.A_p = self.A * np.cos(np.radians(90 - self.viewing_angle))
         else:
-            self.A_p = (np.pi * (self.luminaire_height/2) * (self.luminaire_width/2))\
-                       * np.cos(np.radians(90 - self.viewing_angle))
+            self.A = np.pi * (self.luminaire_height/2) * (self.luminaire_width/2)
+            self.A_p = self.A * np.cos(np.radians(90 - self.viewing_angle))
 
         self.A_p_new_I = (self.luminous_intensity ** 2) / ((self.l_eff * 10 ** -6) ** 2 * self.A_eff)
         self.A_p_new_L = self.A_p / self.k_square_L
 
         self.A_new_L = self.A_p_new_L / np.cos(np.radians(90 - self.viewing_angle))
-        self.A = self.luminaire_width * self.luminaire_height
+
 
         if self.A_p_new_I != 0:
             self.k_square_I = self.A_p / self.A_p_new_I
@@ -843,6 +872,12 @@ class ProjectiveDistUi(QWidget):
                                                                       cmap=custom_colormap.ls_cmap)
             self.filtered_image_figure.figure.colorbar(self.filtered_image_plot, ax=self._filtered_image_ax,
                                                        fraction=0.04, pad=0.035, label="[cd/m^2]")
+            t = np.linspace(0, 2 * pi, 100)
+            self._filtered_image_ax.plot(self.rois[0].width / 2 + ceil(self.filter_width / 2) + (
+                    self.rois[0].width) / 2 * np.cos(t),
+                                         self.rois[0].height / 2 + ceil(self.filter_width / 2) + (
+                                                 self.rois[0].height) / 2 * np.sin(t),
+                                         color='red')
 
         else:
             for i in range(len(self.filtered_image)):
@@ -853,6 +888,13 @@ class ProjectiveDistUi(QWidget):
                                                                              cmap=custom_colormap.ls_cmap)
                 self.filtered_image_figure.figure.colorbar(self.filtered_image_plot, ax=self._filtered_image_ax[i],
                                                            fraction=0.04, pad=0.035, label="[cd/m^2]")
+
+                t = np.linspace(0, 2 * pi, 100)
+                self._filtered_image_ax[i].plot(self.rois[i].width / 2 + ceil(self.filter_width / 2) + (
+                    self.rois[i].width) / 2 * np.cos(t),
+                                             self.rois[i].height / 2 + ceil(self.filter_width / 2) + (
+                                                 self.rois[i].height) / 2 * np.sin(t),
+                                             color='red')
 
         self.filtered_image_figure.draw()
 
@@ -868,6 +910,13 @@ class ProjectiveDistUi(QWidget):
             self.binarized_image_figure.figure.colorbar(self.binarized_image_plot, ax=self._binarized_image_ax,
                                                         fraction=0.04, pad=0.035, label="[cd/m^2]")
 
+            t = np.linspace(0, 2 * pi, 100)
+            self._binarized_image_ax.plot(self.rois[0].width / 2 + ceil(self.filter_width / 2) + (
+                    self.rois[0].width) / 2 * np.cos(t),
+                                         self.rois[0].height / 2 + ceil(self.filter_width / 2) + (
+                                                 self.rois[0].height) / 2 * np.sin(t),
+                                         color='red')
+
         else:
             for i in range(len(self.binarized_image)):
                 self.binarized_image_plot = self._binarized_image_ax[i].imshow(self.binarized_image[i],
@@ -877,6 +926,13 @@ class ProjectiveDistUi(QWidget):
                                                                                cmap=custom_colormap.ls_cmap)
                 self.binarized_image_figure.figure.colorbar(self.binarized_image_plot, ax=self._binarized_image_ax[i],
                                                             fraction=0.04, pad=0.035, label="[cd/m^2]")
+
+                t = np.linspace(0, 2 * pi, 100)
+                self._binarized_image_ax[i].plot(self.rois[i].width / 2 + ceil(self.filter_width / 2) + (
+                    self.rois[i].width) / 2 * np.cos(t),
+                                              self.rois[i].height / 2 + ceil(self.filter_width / 2) + (
+                                                  self.rois[i].height) / 2 * np.sin(t),
+                                              color='red')
 
         self.binarized_image_figure.draw()
 
