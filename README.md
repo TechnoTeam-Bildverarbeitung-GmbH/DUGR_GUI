@@ -13,7 +13,7 @@ you can either download the Code here from Github or grab the version you like f
 
 https://cloud.tu-ilmenau.de/s/PyG785oapRqCNCM
 
-(Current version: v_1.2.4)
+(Current version: v_1.3.0)
 
 ## Documentation
 The folder doc contains further documentation regarding the usage of the GUI and a description of the calculation steps
