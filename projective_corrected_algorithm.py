@@ -3,7 +3,6 @@ Script that contains the functionality for the DUGR calculation approach with pr
 """
 import numpy as np
 import pandas as pd
-import dugr_image_io
 import dugr_image_processing
 import custom_colormap
 
@@ -22,7 +21,6 @@ from matplotlib.widgets import PolygonSelector, RectangleSelector, EllipseSelect
 from matplotlib.patches import Rectangle, Ellipse
 
 from PyQt6.QtGui import QKeySequence, QShortcut
-from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QPushButton,
     QFileDialog,
@@ -34,7 +32,6 @@ from PyQt6.QtWidgets import (
     QTabWidget,
     QComboBox,
     QCheckBox,
-    QStatusBar,
 )
 
 
@@ -43,9 +40,9 @@ class ProjectiveCorrUi(QWidget):
         super(ProjectiveCorrUi, self).__init__(parent)
         layout = QHBoxLayout()
         layout2 = QVBoxLayout()
-        layout3 = QVBoxLayout()
         layout.addLayout(layout2)
-        layout.addLayout(layout3)
+
+        self.status_bar = parent.status_bar
 
         # Parameters
         self.lum_th = 500
@@ -77,6 +74,9 @@ class ProjectiveCorrUi(QWidget):
             [None, None]
         ]
 
+        self.source_image = None
+        self.src_img_header = None
+
         self.logarithmic_scaling_flag = 'x4'
         self.vmin = 0
 
@@ -93,13 +93,6 @@ class ProjectiveCorrUi(QWidget):
         self.filter_width = 2 * ceil(3 * self.sigma) + 1
         self.border_size = floor(self.filter_width / 2)
 
-        # Button to load an image file
-        self.load_file_button = QPushButton("Open File", self)
-        layout2.addWidget(self.load_file_button)
-        self.load_file_button.clicked.connect(self.on_file_open_click)
-        self.load_file_shortcut = QShortcut(QKeySequence("Ctrl+O"), self)
-        self.load_file_shortcut.activated.connect(self.on_file_open_click)
-
         # Label and Combobox for logarithmic image scaling
         logarithmic_scaling_label = QLabel("Logarithmic Scaling")
         layout2.addWidget(logarithmic_scaling_label)
@@ -108,11 +101,6 @@ class ProjectiveCorrUi(QWidget):
         self.logarithmic_scaling_box.setCurrentText("x4")
         self.logarithmic_scaling_box.currentTextChanged.connect(self.on_logarithmic_scaling_change)
         layout2.addWidget(self.logarithmic_scaling_box)
-
-        # Check box to switch between the UIs for projective distorted and corrected procedures
-        self.check_box_proj_corr = QCheckBox('Projective correction', self)
-        layout2.addWidget(self.check_box_proj_corr)
-        self.check_box_proj_corr.setCheckState(Qt.CheckState.Checked)
 
         # Luminance Threshold Label + Line Box
         luminance_threshold_label = QLabel("Luminance Threshold [cd/m^2]")
@@ -311,7 +299,7 @@ class ProjectiveCorrUi(QWidget):
         self.tabs.addTab(self.filter_image_tab, "Filtered Image")
         self.tabs.addTab(self.binarize_tab, 'Binarized Image')
         self.tabs.addTab(self.result_tab, "Result")
-        layout3.addWidget(self.tabs)
+        layout.addWidget(self.tabs)
 
         self._source_ax = self.source_figure.figure.subplots()
         self._rectified_ax = self.rectified_figure.figure.subplots()
@@ -323,69 +311,34 @@ class ProjectiveCorrUi(QWidget):
 
         layout2.addStretch()
 
-        # Button to calculate the DUGR value and print a result table on the result tab
-        button_calculate_dugr = QPushButton("Calculate DUGR")
-        layout2.addWidget(button_calculate_dugr)
-        button_calculate_dugr.clicked.connect(self.on_calculate_dugr_click)
-
-        layout2.addStretch()
-
-        self.status_bar = QStatusBar(self)
-        layout3.addWidget(self.status_bar)
 
         self.setLayout(layout)
 
-    def on_file_open_click(self):
 
-        image_path = QFileDialog.getOpenFileName(self, "Choose file")[0]
+    def setImage(self, source_image, src_img_header):
+        self.source_image = source_image
+        self.src_img_header = src_img_header
 
-        if exists(image_path):
-            if image_path[-2:] != 'pf' or image_path[-3:] != 'txt':
-                self.status_bar.showMessage('File type is invalid.\nMake sure to load a *.pf  or *.txt File')
-            if image_path[-2:] == 'pf':
-                self.source_image, src_img_header = dugr_image_io.convert_tt_image_to_numpy_array(image_path)
-                try:
-                    self.vmin = np.max(self.source_image) / 10 ** int(self.logarithmic_scaling_flag[-1])
-                except ValueError:
-                    self.status_bar.showMessage('WARNING: The Image you want to load is in one of the supported file '
-                                                'types, but the pixel information is not readable. '
-                                                'Make sure the file is not corrupted')
+        try:
+            self.vmin = np.max(self.source_image) / 10 ** int(self.logarithmic_scaling_flag[-1])
+        except ValueError:
+            self.status_bar.showMessage('WARNING: The Image you want to load is in one of the supported file '
+                                        'types, but the pixel information is not readable. '
+                                        'Make sure the file is not corrupted')
 
-                self.source_figure.figure.clf()
-                self._source_ax = self.source_figure.figure.subplots()
-                self.src_plot = self._source_ax.imshow(self.source_image,
-                                                       norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                       cmap=custom_colormap.ls_cmap)
-                self.source_figure.figure.colorbar(self.src_plot, ax=self._source_ax, fraction=0.04, pad=0.035,
-                                                   label="cd/m^2")
-                self.source_figure.draw()
-                self.poly = PolygonSelector(ax=self._source_ax, onselect=self.on_poly_select, useblit=True,
-                                            props=dict(color='white', linestyle='-', linewidth=2, alpha=0.5))
-                self.shape_selector = RectangleSelector(ax=self._rectified_ax, onselect=self.on_roi_select,
-                                                        useblit=True,
-                                                        button=[1, 3], interactive=True, spancoords='pixels')
-                self.status_bar.showMessage('File import successful')
-
-            elif image_path[-3:] == "txt":
-                self.source_image = dugr_image_io.convert_ascii_image_to_numpy_array(image_path)
-                try:
-                    self.vmin = np.max(self.source_image) / 10 ** int(self.logarithmic_scaling_flag[-1])
-                except ValueError:
-                    self.status_bar.showMessage('WARNING: The Image you want to load is in one of the supported file '
-                                                'types, but the pixel information is not readable. '
-                                                'Make sure the file is not corrupted')
-
-                self.source_figure.figure.clf()
-                self._source_ax = self.source_figure.figure.subplots()
-                self.src_plot = self._source_ax.imshow(self.source_image,
-                                                       norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
-                                                       cmap=custom_colormap.ls_cmap)
-                self.source_figure.figure.colorbar(self.src_plot, ax=self._source_ax, fraction=0.04, pad=0.035,
-                                                   label="cd/m^2")
-                self.source_figure.draw()
-                self.status_bar.showMessage('File import successful')
-        else:
-            self.status_bar.showMessage('No File selected')
+        self.source_figure.figure.clf()
+        self._source_ax = self.source_figure.figure.subplots()
+        self.src_plot = self._source_ax.imshow(self.source_image,
+                                                norm=LogNorm(vmin=self.vmin, vmax=np.max(self.source_image)),
+                                                cmap=custom_colormap.ls_cmap)
+        self.source_figure.figure.colorbar(self.src_plot, ax=self._source_ax, fraction=0.04, pad=0.035,
+                                            label="cd/m^2")
+        self.source_figure.draw()
+        self.poly = PolygonSelector(ax=self._source_ax, onselect=self.on_poly_select, useblit=True,
+                                    props=dict(color='white', linestyle='-', linewidth=2, alpha=0.5))
+        self.shape_selector = RectangleSelector(ax=self._rectified_ax, onselect=self.on_roi_select,
+                                                useblit=True,
+                                                button=[1, 3], interactive=True, spancoords='pixels')
 
     def on_poly_select(self, vertices):
         self.vertices = vertices
@@ -802,8 +755,7 @@ class ProjectiveCorrUi(QWidget):
                 self.status_bar.showMessage("No ROI for the binarization found")
             self.binarize_figure.draw()
 
-    def on_calculate_dugr_click(self):
-
+    def execute(self):
         if len(self.binarized_rois) == 0:
             self.status_bar.showMessage("There is no binarized ROI, make sure to execute each step before starting"
                                         "the calculation.")
