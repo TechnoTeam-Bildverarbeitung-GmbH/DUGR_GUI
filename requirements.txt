@@ -1,0 +1,7 @@
+PyQt6
+numpy
+pandas
+matplotlib
+opencv-python
+scipy
+pyinstaller

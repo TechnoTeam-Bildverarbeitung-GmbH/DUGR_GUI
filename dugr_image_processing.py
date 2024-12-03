@@ -12,40 +12,25 @@ Functions to handle image processing steps of the DUGR calculation
 - Function that executes the calculation of the DUGR value on projective distorted images
 """
 import matplotlib.pyplot as plt
+import scipy.ndimage
 from matplotlib.colors import LogNorm
 import numpy as np
 from cv2 import getPerspectiveTransform, warpPerspective, filter2D
-from scipy.ndimage import correlate
+from scipy.ndimage import correlate, gaussian_filter
 from math import sqrt, atan2, atan, cos, tan, radians, degrees, exp, log, ceil
+from dugr_image_io import *
+from params import *
 
 
-def filter_image(image: np.ndarray, filter_width: float, sigma: float):
-    """
-    This function uses a translation of the MATLAB fspecial('gaussian',[shape],[sigma]) function to calculate a 2D
-    gaussian mask (See: https://de.mathworks.com/help/images/ref/fspecial.html#d123e101030).
-    The results should be equal to the calculation with MATLAB (within the rounding error).
-    The filter is then applied to the image by using the scipy.ndimage.correlate() function with the previously
-    calculated 2D gaussian mask.
+def filter_image(image: DUGRImage, filter_width: float, sigma: float):
+    filter_radius = int((filter_width - 1) / 2)
 
-    Args:
-        image: The image on which the filtering is performed on
-        filter_width: The width of the gaussian filter
-        sigma: The Standard Deviation of the gaussian function -> Higher sigma -> Wider blur radius
-    Returns:
-         The gaussian filtered image as numpy array
+    filtered_data = gaussian_filter(image.data, sigma, radius=filter_radius)
 
-    """
+    filtered_img = DUGRImage(image.bbox)
+    filtered_img.data = filtered_data
 
-    filter_shape = (filter_width, filter_width)
-    m, n = [(ss-1.)/2. for ss in filter_shape]
-    y, x = np.ogrid[-m:m+1, -n:n+1]
-    h = np.exp(-(x*x + y*y) / (2.*sigma*sigma))
-    h[h < np.finfo(h.dtype).eps*h.max()] = 0
-    sumh = h.sum()
-    if sumh != 0:
-        h /= sumh
-    return correlate(image, h, mode='nearest')
-
+    return filtered_img
 
 def projective_rectification(image: np.ndarray, rect: np.ndarray, luminaire_width: int, luminaire_height: int):
     """
@@ -133,63 +118,8 @@ def projective_rectification_with_borders(image, rect, border_size, luminaire_wi
     return warped_image_with_borders
 
 
-def cart2theta_phi(focal_length, pixel_size, image, opt_x=None, opt_y=None):
-    """
-    Function to retrieve theta and phi angles from cartesian coordinates and optical axis
-
-    opt_x and opt_y define the coordinates of the optical axis in the image, default value is in the middle of the image
-
-    Args:
-        focal_length: Focal length of the camera
-        pixel_size: Pixel size of the camera sensor
-        image: Input image
-        opt_x: x-Coordinates of the optical axis
-        opt_y: y -Coordinates of the optical axis
-
-    Returns:
-        theta: Numpy array representing the theta angle of each pixel
-        phi: Numpy array representing the phi angle of each pixel
-    """
-
-    if not opt_x:
-        opt_x = image.shape[1] // 2
-    if not opt_y:
-        opt_y = image.shape[0] // 2
-
-    theta = np.zeros(image.shape)
-    phi = np.zeros(image.shape)
-    for n in range(image.shape[0]):
-        for m in range(image.shape[1]):
-            theta[n][m] = np.degrees(atan2(sqrt(((opt_x-m)*pixel_size)**2 + ((opt_y-n)*pixel_size)**2), focal_length))
-            phi[n][m] = atan2(radians(opt_y-n), radians(opt_x-m))
-
-    return theta, phi
 
 
-def img2cart_dist_img(image: np.ndarray, opt_x: int = None, opt_y: int = None):
-    """
-    Function to retrieve an image with the cartesian distance to the optical axis.
-    If no optical axis coordinates are given, the optical axis defaults to the image center
-
-    Args:
-        image: The image in the cartesian coordinate system
-        opt_x: x coordinate of the optical axis
-        opt_y: y coordinate of the optical axis
-
-    Returns:
-         cart_dist_image: Numpy array containing the cartesian distances of each pixel to the optical axis
-
-    """
-    if not opt_x:
-        opt_x = image.shape[1] // 2
-    if not opt_y:
-        opt_y = image.shape[0] // 2
-
-    cart_dist_img = np.zeros(image.shape)
-    for y in range(np.shape(cart_dist_img)[0]):
-        for x in range(np.shape(cart_dist_img)[1]):
-            cart_dist_img[y, x] = sqrt((opt_x - x) ** 2 + (opt_y - y) ** 2)
-    return cart_dist_img
 
 
 def get_center_of_mass(x_coordinates, y_coordinates, values):
@@ -246,11 +176,7 @@ def check_point(x, y, p_x1, p_x2, p_y1, p_y2):
     """
     return np.sign((p_x2 - p_x1) * (y - p_y1) - (p_y2 - p_y1) * (x - p_x1))
 
-
-def execute_projective_dist_algorithm(src_image: np.ndarray, viewing_distance: float, luminous_area_height: float,
-                                      viewing_angle: float, focal_length: float, pixel_size: float, rois: list,
-                                      filter_flag: bool, d: int = 12, opt_x: int = None, opt_y: int = None):
-    """
+"""
     Function that executes the calculation of the DUGR value on a projective distorted image
 
     Args:
@@ -262,7 +188,8 @@ def execute_projective_dist_algorithm(src_image: np.ndarray, viewing_distance: f
         focal_length: Focal length of the optical system used for the measurement
         pixel_size: Size of a pixel of the sensor of the optical system used for the measurement (Pixel Pitch)
         rois: Regions of interest (Regions containing luminous areas)
-        filter_flag: When this flag is set to true, only the "Regions of Interest" are gaussian filtered
+        lum_th: Threshold for luminance
+        filter_only_roi_flag: When this flag is set to true, only the "Regions of Interest" are gaussian filtered
         d: Minimal feature diameter (Default = 12mm)
         opt_x: x coordinate of the optical axis
         opt_y: y coordinate of the optical axis
@@ -282,206 +209,202 @@ def execute_projective_dist_algorithm(src_image: np.ndarray, viewing_distance: f
         filter_width: Width of the gaussian filter
         filtered_img: Filtered Image as Numpy array
         binarized_img: Binarized Image as Numpy array
-    """
-    rb_min = sqrt(viewing_distance**2 + (luminous_area_height/2)**2 + viewing_distance * luminous_area_height *
-                  cos(radians(viewing_angle)))
+"""
 
-    ro_min = degrees(atan(d/rb_min))/10
+class DUGR_ProjectiveDistAlgorithm():
+    def __init__(self, src_img:DUGRImage, cparams:ParamGroup, luminous_area_height: float,
+                        viewing_angle: float, rois: list,
+                        lum_th: int, use_only_roi: bool, d: int = 12, img_center: tuple[float, float] = [],
+                        only_plausibility_test=False):
+        self.luminous_area_height = luminous_area_height
+        self.viewing_angle = viewing_angle
+        self.rois = rois
+        self.lum_th = lum_th
+        self.use_only_roi = use_only_roi
+        self.d = d
+        self.img_center = img_center
+        self.only_plausibility_test = only_plausibility_test
 
-    r_5deg = (tan(radians(5.0)) * focal_length)/pixel_size
-    r_o = 5.0 / r_5deg
+        ## Get parameters from common parameter data
+        self.cparams = cparams
+        self.viewing_distance = self.cparams.getValue("viewing_distance")
+        self.focal_length = self.cparams.getValue("focal_length")
+        self.pixel_size = self.cparams.getValue("pixel_size")
 
-    fwhm = ro_min/r_o
-    sigma = fwhm / 2.3584
-    filter_width = 2 * ceil(3 * sigma) + 1
 
-    #  Calculate Theta and Phi Image
-    theta, phi = cart2theta_phi(focal_length=focal_length, pixel_size=pixel_size, image=src_image, opt_x=opt_x,
-                                opt_y=opt_y)
 
-    #  Convert Theta to radians
-    theta_rad = np.radians(theta)
+        # rb_min: Distance to the furthest edge of the luminaire in relation to the optical system.
+        # luminous_area_height is the vertical dimension of the luminaire in this scene.
+        self.rb_min = sqrt(self.viewing_distance**2 + (self.luminous_area_height/2)**2 + self.viewing_distance * self.luminous_area_height *
+                  cos(radians(self.viewing_angle)))
+        # ro_min: Minimal measurement resolution
+        self.ro_min = degrees(atan(self.d/self.rb_min))/10
 
-    #  Calculate the sin theta image
-    sin_theta_rad = np.sin(theta_rad)
+        # In general, the °/pixel ratio is not constant. Thus, the ratio is determined for a 5° angle. An improvement
+        # of this method would be to take the half opening angle of the scene.
+        r_5deg = (tan(radians(5.0)) * self.focal_length) / self.pixel_size
+        self.r_o = 5.0 / r_5deg
 
-    #  Define Filter kernels for horizontal and vertical filtering of an image
-    kernel_h = np.array([[0, 0, 0],
-                         [-1, 0, 1],
-                         [0, 0, 0]])
+        # fwhm: Full width at half minimum of the gaussian filter
+        self.fwhm = self.ro_min / self.r_o * 10
+        self.sigma = self.fwhm / 2.3548
+        self.filter_radius = ceil(3 * self.sigma)
+        self.filter_width = 2 * self.filter_radius + 1
 
-    kernel_v = np.array([[0, -1, 0],
-                         [0, 0, 0],
-                         [0, 1, 0]])
+        # Source image extended by border with the width of the filter radius
+        self.src_img = src_img.getExtended(self.filter_radius)
 
-    #  Steps for euclidian distance calculation:
-    #  1. Calculate one horizontal and one vertical filtered image
-    theta_filtered_h = (filter2D(theta, -1, kernel_h)) / 2
-    theta_filtered_v = (filter2D(theta, -1, kernel_v)) / 2
+        if len(self.img_center) == 0:
+            self.img_center = self.src_img.bbox.getCenter()
 
-    #  2. Square the filterd Images
-    pow_theta_filtered_h = theta_filtered_h ** 2
-    pow_theta_filtered_v = theta_filtered_v ** 2
+    def cart2theta_phi(self):
+        """
+        Function to retrieve theta and phi angles from cartesian coordinates and optical axis
 
-    #  3. Sum of the squared images
-    theta_add = pow_theta_filtered_h + pow_theta_filtered_v
+        Returns:
+            theta: Image representing the theta angle of each pixel
+            phi: Image representing the phi angle of each pixel
+        """
 
-    #  4. Square root of the sum
-    theta_diff = np.sqrt(theta_add)
+        self.theta_img = DUGRImage(self.src_img.bbox)
+        self.phi_img = DUGRImage(self.src_img.bbox)
 
-    #  Convert the euclidian distance image to radians
-    theta_diff_arc = np.radians(theta_diff)
+        theta_data = self.theta_img.data
+        phi_data = self.phi_img.data
 
-    #  Calculate the cartesian distance to the image optical axis
-    cart_dist_img = img2cart_dist_img(image=src_image)
+        x0, y0 = self.img_center
 
-    #  Divide the euclidian theta distance in radians by the cartesian distance
-    #  Ignore warnings for 0 division because we set our NAN element to 0 manually
-    with np.errstate(divide='ignore', invalid='ignore'):
-        theta_diff_arc_by_cart_dist = np.nan_to_num(theta_diff_arc / cart_dist_img)
+        for yi, y in self.theta_img.bbox.enumerateY():
+            for xi, x in self.theta_img.bbox.enumerateX():
+                theta_data[yi][xi] = np.degrees(
+                    atan2(sqrt(((x0 - x) * self.pixel_size) ** 2 +
+                               ((y0 - y) * self.pixel_size) ** 2), self.focal_length))
+                phi_data[yi][xi] = atan2(radians(y0 - y), radians(x0 - x))
 
-    #  Calculate the omega image (Solid angle image)
-    omega = theta_diff_arc_by_cart_dist * sin_theta_rad
+    def img2cart_dist_img(self):
+        """
+        Function to retrieve an image with the cartesian distance to the optical axis.
+        If no optical axis coordinates are given, the optical axis defaults to the image center
 
-    #  Filter the image based on the filter parameters calculated
-    filtered_img = []
-    if not filter_flag:
-        filtered_img.append(filter_image(src_image, filter_width, sigma))
+        Args:
+            image: The image in the cartesian coordinate system
+            opt_x: x coordinate of the optical axis
+            opt_y: y coordinate of the optical axis
 
-    elif filter_flag:
-        for i in range(len(rois)):
-            if type(rois[i]).__name__ == 'TrapezoidRoi':
-                filtered_img_roi = filter_image(
-                    src_image[int(min(rois[i].top_left[1], rois[i].top_right[1]) - ceil(filter_width/2)):int(
-                        max(rois[i].bottom_left[1], rois[i].bottom_right[1]) + ceil(filter_width/2)),
-                              int(min(rois[i].top_left[0], rois[i].bottom_left[0]) - ceil(filter_width/2)):int(
-                                  max(rois[i].top_right[0], rois[i].bottom_right[0]) + ceil(filter_width/2))],
-                    filter_width, sigma)
-                filtered_img.append(filtered_img_roi)
+        Returns:
+             cart_dist_image: Numpy array containing the cartesian distances of each pixel to the optical axis
 
-            elif type(rois[i]).__name__ == 'RectangularRoi' or type(rois[i]).__name__ == 'CircularRoi':
-                filtered_img_roi = filter_image(
-                    src_image[
-                              int(rois[i].top_left[1] - ceil(filter_width / 2)):int(rois[i].bottom_left[1] + ceil(
-                                  filter_width / 2)),
-                              int(rois[i].top_left[0] - ceil(filter_width / 2)):int(rois[i].top_right[0] + ceil(
-                                  filter_width / 2))
-                              ], filter_width, sigma)
-                filtered_img.append(filtered_img_roi)
+        """
 
-    #  Define lists to store parameters corresponding to the pixel values of the threshold
-    binarized_img = []
-    eff_solid_angle_values = []
-    for count, filtered_image_roi in enumerate(filtered_img):
-        binarized_img_roi = np.zeros(filtered_image_roi.shape)
+        self.cart_dist_img = DUGRImage(self.src_img.bbox)
+        img_data = self.cart_dist_img.data
+        x0, y0 = self.img_center
 
-        for i in range(filtered_image_roi.shape[0]):
-            for j in range(filtered_image_roi.shape[1]):
-                if filtered_image_roi[i][j] >= 500:
-                    binarized_img_roi[i][j] = filtered_image_roi[i][j]
-                    if not filter_flag:
-                        eff_solid_angle_values.append(omega[i][j])
+        for yi, y in self.cart_dist_img.bbox.enumerateY():
+            for xi, x in self.cart_dist_img.bbox.enumerateX():
+                img_data[yi, xi] = sqrt((x0 - x) ** 2 + (y0 - y) ** 2)
 
-        binarized_img.append(binarized_img_roi)
+    def calcOmega(self):
+        theta_data = self.theta_img.data
 
-    # Calculate the mean luminance l_s of the whole luminaire
-    # Calculate the solid angle omega_l of the whole luminaire
+        #  Convert Theta to radians
+        theta_rad = np.radians(theta_data)
 
-    l_values = []
-    omega_values = []
+        #  Calculate the sin theta image
+        sin_theta_rad = np.sin(theta_rad)
 
-    for i in range(len(rois)):
+        #  Define Filter kernels for horizontal and vertical filtering of an image
+        kernel_h = np.array([[0, 0, 0],
+                             [-1, 0, 1],
+                             [0, 0, 0]])
 
-        if type(rois[i]).__name__ == 'TrapezoidRoi':
-            y_start = min(rois[i].roi_vertices[:, 1])
-            y_end = max(rois[i].roi_vertices[:, 1])
-            x_start = min(rois[i].roi_vertices[:, 0])
-            x_end = max(rois[i].roi_vertices[:, 0])
+        kernel_v = np.array([[0, -1, 0],
+                             [0, 0, 0],
+                             [0, 1, 0]])
 
-            y_array = np.arrange(y_start, y_end, 1)
-            x_array = np.arrange(x_start, x_end, 1)
+        #  Steps for euclidian distance calculation:
+        #  1. Calculate one horizontal and one vertical filtered image
+        theta_filtered_h = (filter2D(theta_data, -1, kernel_h)) / 2
+        theta_filtered_v = (filter2D(theta_data, -1, kernel_v)) / 2
 
-            # Check whether a point is inside the trapezoid:
-            # https://math.stackexchange.com/questions/757591/how-to-determine-the-side-on-which-a-point-lies
-            for y_roi, y_src in enumerate(y_array):
-                for x_roi, x_src in enumerate(x_array):
-                    if (check_point(x_roi, y_roi, rois[i].top_left[0], rois[i].bottom_left[0], rois[i].top_left[1],
-                                    rois[i].bottom_left[1]) <= 0) and (check_point(x_roi, y_roi, rois[i].top_right[0],
-                                                                                   rois[i].bottom_right[0],
-                                                                                   rois[i].top_right[1],
-                                                                                   rois[i].bottom_right[1]) >= 0):
-                        l_values.append(src_image[y_src][x_src])
-                        omega_values.append(omega[y_src][x_src])
+        #  2. Square the filterd Images
+        pow_theta_filtered_h = theta_filtered_h ** 2
+        pow_theta_filtered_v = theta_filtered_v ** 2
 
-                        if filter_flag and binarized_img[i][y_roi][x_roi] != 0:
-                            eff_solid_angle_values.append(omega[y_src][x_src])
+        #  3. Sum of the squared images
+        theta_add = pow_theta_filtered_h + pow_theta_filtered_v
 
-                    else:
-                        if binarized_img[i][y_roi][x_roi] != 0:
-                            binarized_img[i][y_roi][x_roi] = 0
+        #  4. Square root of the sum
+        theta_diff = np.sqrt(theta_add)
 
-        elif type(rois[i]).__name__ == 'CircularRoi':
-            h = rois[i].middle_point_coordinates[0]
-            k = rois[i].middle_point_coordinates[1]
-            r_x = rois[i].width/2
-            r_y = rois[i].height/2
-            y_min = min(rois[i].bounding_box_coordinates[:, 1])
-            y_max = max(rois[i].bounding_box_coordinates[:, 1])
+        #  Convert the euclidian distance image to radians
+        theta_diff_arc = np.radians(theta_diff)
 
-            x_min = min(rois[i].bounding_box_coordinates[:, 0])
-            x_max = max(rois[i].bounding_box_coordinates[:, 0])
+        #  Calculate the cartesian distance to the image optical axis
+        self.img2cart_dist_img()
 
-            y_array = np.arange(start=y_min - ceil(filter_width / 2), stop=y_max + ceil(filter_width / 2), step=1)
-            x_array = np.arange(start=x_min - ceil(filter_width / 2), stop=x_max + ceil(filter_width / 2), step=1)
+        #  Divide the euclidian theta distance in radians by the cartesian distance
+        #  Ignore warnings for 0 division because we set our NAN element to 0 manually
+        with np.errstate(divide='ignore', invalid='ignore'):
+            theta_diff_arc_by_cart_dist = np.nan_to_num(theta_diff_arc / self.cart_dist_img.data)
 
-            # Check whether a point is part of the Ellipsoid:
-            # https://math.stackexchange.com/questions/76457/check-if-a-point-is-within-an-ellipse
-            for y_roi, y_src in enumerate(y_array):
-                for x_roi, x_src in enumerate(x_array):
-                    if ((x_src - h)**2)/(r_x**2) + ((y_src - k)**2)/(r_y**2) <= 1:
-                        l_values.append(src_image[y_src][x_src])
-                        omega_values.append(omega[y_src][x_src])
+        #  Calculate the omega image (Solid angle image)
+        omega = theta_diff_arc_by_cart_dist * sin_theta_rad
 
-                        if filter_flag and binarized_img[i][y_roi][x_roi] != 0:
-                            eff_solid_angle_values.append(omega[y_src][x_src])
+        self.omega_img = DUGRImage(self.src_img.bbox)
+        self.omega_img.data = omega
 
-                    else:
-                        if binarized_img[i][y_roi][x_roi] != 0:
-                            binarized_img[i][y_roi][x_roi] = 0
+    def execute(self):
+        #  Calculate Theta and Phi Image
+        self.cart2theta_phi()
+        self.calcOmega()
 
-        elif type(rois[i]).__name__ == 'RectangularRoi':
-            y_min = min(rois[i].roi_coordinates[:, 1])
-            y_max = max(rois[i].roi_coordinates[:, 1])
-            x_min = min(rois[i].roi_coordinates[:, 0])
-            x_max = max(rois[i].roi_coordinates[:, 0])
+        #  Filter the image based on the filter parameters calculated
+        self.filtered_img = filter_image(self.src_img, self.filter_width, self.sigma)
 
-            y_array = np.arange(start=y_min - ceil(filter_width / 2), stop=y_max + ceil(filter_width / 2), step=1)
-            x_array = np.arange(start=x_min - ceil(filter_width / 2), stop=x_max + ceil(filter_width / 2), step=1)
+        # Generate mask image with threshold operator on filtered image
+        mask_threshold_data = self.filtered_img.data >= self.lum_th
+        # Generate mask image of ROI shapes
+        mask_roi_img = DUGRImage(self.src_img.bbox)
+        for roi in self.rois:
+            mask_roi_img.data[roi.bbox.getSlice(mask_roi_img.bbox)] = roi.getMaskData()
 
-            for y_roi, y_src in enumerate(y_array):
-                for x_roi, x_src in enumerate(x_array):
-                    l_values.append(src_image[y_src][x_src])
-                    omega_values.append(omega[y_src][x_src])
+        # When plausibility test is requested, set ROI of filtered image to 1000. Now, the solid angle of the
+        # luminous area multiplied by the square of the radius should be equal to the projected area of the
+        # given luminous area dimensions.
+        if self.only_plausibility_test:
+            self.filtered_img.data = mask_roi_img.data * 1000.0
 
-                    if filter_flag and binarized_img[i][y_roi][x_roi] != 0:
-                        eff_solid_angle_values.append(omega[y_src][x_src])
+        # When only calculation inside the ROIs is requested, multiply the threshold mask with ROI mask
+        if self.use_only_roi:
+            mask_threshold_data = mask_threshold_data * mask_roi_img.data
 
-    l_s = np.array(l_values).mean()
-    omega_l = np.array(omega_values).sum()
+        # ------------- Statistics --------------
+        # Values from ROI areas (not filtered) without threshold operator
+        # luminance_roi_mask_data = self.filtered_img.data * mask_roi_img.data
+        luminance_roi_mask_data = self.src_img.data * mask_roi_img.data
+        omega_roi_mask_data = self.omega_img.data * mask_roi_img.data
 
-    #  Calculate the effective solid angel by calculating the sum of the pixel solid angles over the luminance threshold
-    omega_eff = np.sum(np.array(eff_solid_angle_values))
+        # omega_l: Solid angle of the whole luminous area (inside ROI shapes).
+        self.omega_l = np.sum(omega_roi_mask_data)
+        # l_s: Mean Luminance (inside ROI shapes)
+        self.l_s = np.sum(luminance_roi_mask_data) / np.sum(mask_roi_img.data)
+        #print("omega_l: %g, l_s = %g" % (self.omega_l, self.l_s))
 
-    # Calculate the effective luminance by calculating the sum of the luminance values over the threshold
-    l_eff = []
-    for binarized_img_roi in binarized_img:
-        l_eff.append(binarized_img_roi[binarized_img_roi != 0].mean())
-    l_eff = np.array(l_eff).mean()
+        ## Effective values on basis of the threshold image. When calculation only inside ROIs is requested
+        ## (use_only_roi - flag), mask_threshold_data excludes areas outside the ROIs.
+        # Calculate threshold image and masked omega image
+        self.threshold_img = DUGRImage(self.src_img.bbox)
+        self.threshold_img.data = self.filtered_img.data * mask_threshold_data
+        omega_threshold_mask_data = self.omega_img.data * mask_threshold_data
+        # omega_eff: Effective Solid Angle
+        self.omega_eff = np.sum(omega_threshold_mask_data)
+        # l_eff: Effective Luminance
+        self.l_eff = np.sum(self.threshold_img.data) / np.sum(mask_threshold_data)
 
-    k_square = (l_eff**2 * omega_eff)/(l_s**2 * omega_l)
+        #print("omega_eff: %g, l_eff = %g" % (self.omega_eff, self.l_eff))
 
-    # Calculate the DUGR value
-    dugr = 8 * log(k_square, 10)
 
-    return dugr, k_square, l_eff, l_s, omega_eff, omega_l, r_o, rb_min, ro_min, fwhm, sigma, filter_width,\
-        filtered_img, binarized_img
+        return (self.l_eff, self.l_s, self.omega_eff, self.omega_l, self.r_o, self.rb_min,
+                self.ro_min, self.fwhm, self.sigma, self.filter_width, self.filtered_img, self.threshold_img)
+
