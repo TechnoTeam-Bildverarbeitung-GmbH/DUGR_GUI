@@ -111,6 +111,14 @@ class MainWindow(QMainWindow):
 
         # ------ Help -------
         menu = menuBar.addMenu("&Help")
+        # Manual
+        action = QAction("&Software manual", self)
+        menu.addAction(action)
+        action.triggered.connect(self.onHelpManual)
+        # About
+        action = QAction("&About", self)
+        menu.addAction(action)
+        action.triggered.connect(self.onHelpAbout)
 
         # -------- Toolbar ----------
         toolbar = QToolBar("")
@@ -208,6 +216,16 @@ class MainWindow(QMainWindow):
 
     def onPlausibilityTestClick(self):
         self.eval_tab.plausibilityTest()
+
+    def onHelpManual(self):
+        os.system("doc\\Softwaremanual-DURG-Calculator.pdf")
+
+    def onHelpAbout(self):
+        QMessageBox.about(self, "About", "DUGR Calculator v.1.5.0\n\n"
+                        "Home: https://github.com/TechnoTeam-Bildverarbeitung-GmbH/DUGR_GUI\n\n"
+                        "This program is free software under the\n"
+                        "GNU GENERAL PUBLIC LICENSE Version 3, 29 June 2007.\n"
+                        "Refer to doc/LICENSE.txt or https://www.gnu.org/licenses/")
 
     def onSwitchProjRectMode(self, flag):
         if flag:
