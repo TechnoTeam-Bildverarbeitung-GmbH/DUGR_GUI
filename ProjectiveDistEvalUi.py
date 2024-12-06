@@ -243,6 +243,7 @@ class ProjectiveDistEvalUi(QWidget):
         self.update_roi_plot()
 
     def clear(self):
+        self.rois = []
         self.source_img_tab.clear()
         self.roi_img_tab.clear()
         self.deleteResults()
@@ -262,7 +263,6 @@ class ProjectiveDistEvalUi(QWidget):
         self._updateUI()
 
     def deleteResults(self):
-        self.rois = []
         self.results = None
 
         if self.filtered_img != None:
